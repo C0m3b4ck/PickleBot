@@ -1,0 +1,3 @@
+* separate into files
+* finish logic
+* [expansion] add more variables to algos and weights
