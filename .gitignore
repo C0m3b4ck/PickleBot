@@ -1,0 +1,4 @@
+main
+prog
+*.py
+__pycache__
