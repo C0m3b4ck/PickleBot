@@ -1,3 +1,0 @@
-/home/sb3x/Code/PickleBot/wxGUI/build/CMakeFiles/picklebot.dir
-/home/sb3x/Code/PickleBot/wxGUI/build/CMakeFiles/edit_cache.dir
-/home/sb3x/Code/PickleBot/wxGUI/build/CMakeFiles/rebuild_cache.dir
