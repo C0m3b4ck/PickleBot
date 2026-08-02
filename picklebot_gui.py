@@ -39,6 +39,18 @@ KOLOR_LOGU = {
     'info': '#4dd2ff', 'txt': '#c8d6e0',
 }
 
+# bot modes: number used by the engine, display name and short description
+TRYBY = [
+    {'nr': 1, 'pl': 'Agresywny (materiał)', 'en': 'Aggressive (material)',
+     'pl_opis': 'Poluje na materiał wroga.', 'en_opis': 'Hunts enemy material.'},
+    {'nr': 2, 'pl': 'Ofensywny (król)', 'en': 'Offensive (king)',
+     'pl_opis': 'Atakuje króla przeciwnika.', 'en_opis': 'Attacks the enemy king.'},
+    {'nr': 3, 'pl': 'Defensywny (materiał)', 'en': 'Defensive (material)',
+     'pl_opis': 'Broni się i trzyma materiał.', 'en_opis': 'Defends, keeps material safe.'},
+    {'nr': 4, 'pl': 'Ochronny (król)', 'en': 'Guarding (king)',
+     'pl_opis': 'Najpierw broni własnego króla.', 'en_opis': 'Defends its own king above all.'},
+]
+
 
 def poziom_logu(tekst):
     if '[ OK ]' in tekst:
@@ -76,6 +88,33 @@ class Aplikacja:
     def _t(self, pl, en):
         return en if self.en else pl
 
+    def _nazwa_trybu(self, nr):
+        t = TRYBY[nr - 1]
+        return t['en'] if self.en else t['pl']
+
+    def _opis_trybu(self, nr):
+        t = TRYBY[nr - 1]
+        return t['en_opis'] if self.en else t['pl_opis']
+
+    def _numer_trybu(self):
+        for t in TRYBY:
+            if self._nazwa_trybu(t['nr']) == self.var_tryb.get():
+                return t['nr']
+        return 1
+
+    def _wybrano_tryb(self):
+        self.nr_trybu = self._numer_trybu()
+        self._odswiez_opis_trybu()
+
+    def _odswiez_tryby(self):
+        nazwy = [self._nazwa_trybu(t['nr']) for t in TRYBY]
+        self.tryby['values'] = nazwy
+        self.var_tryb.set(self._nazwa_trybu(self.nr_trybu))
+        self._odswiez_opis_trybu()
+
+    def _odswiez_opis_trybu(self):
+        self.etykieta_opis_trybu.configure(text=self._opis_trybu(self.nr_trybu))
+
     def _styl(self):
         self.s = ttk.Style(self.root)
         try:
@@ -102,7 +141,7 @@ class Aplikacja:
         panel = tk.Frame(self.root, bg=TLO)
         panel.pack(side='left', fill='y', padx=(0, 12), pady=12)
 
-        self.var_tryb = tk.StringVar(value='1')
+        self.var_tryb = tk.StringVar()
         self.var_strona = tk.StringVar(value='W')
         self.var_czas = tk.StringVar(value='0')
         self.var_verbose = tk.BooleanVar(value=False)
@@ -110,9 +149,11 @@ class Aplikacja:
         self.etykiety = []
         self.etykiety.append(tk.Label(panel, text='', bg=TLO, fg='#c8d6e0'))
 
-        tryby = ttk.Combobox(panel, textvariable=self.var_tryb, state='readonly', width=22)
-        tryby['values'] = [str(i) for i in range(1, 5)]
-        tryby.current(0)
+        self.tryby = ttk.Combobox(panel, textvariable=self.var_tryb, state='readonly', width=26)
+        self.tryby.bind('<<ComboboxSelected>>', lambda _e: self._wybrano_tryb())
+        self.nr_trybu = 1
+        self.etykieta_opis_trybu = tk.Label(panel, text='', bg=TLO, fg='#9fb0bd',
+                                            wraplength=230, justify='left')
 
         strony = ttk.Combobox(panel, textvariable=self.var_strona, state='readonly', width=22)
         strony['values'] = ['W', 'B', 'R']
@@ -144,7 +185,9 @@ class Aplikacja:
         self.etykiety[0].grid(row=wiersz, column=0, columnspan=2, pady=(0, 4))
         wiersz += 1
         self._etykieta_pola(panel, 'tryb', wiersz)
-        tryby.grid(row=wiersz, column=1, pady=2, sticky='w')
+        self.tryby.grid(row=wiersz, column=1, pady=2, sticky='w')
+        wiersz += 1
+        self.etykieta_opis_trybu.grid(row=wiersz, column=0, columnspan=2, pady=(0, 4), sticky='w')
         wiersz += 1
         self._etykieta_pola(panel, 'strona', wiersz)
         strony.grid(row=wiersz, column=1, pady=2, sticky='w')
@@ -196,6 +239,7 @@ class Aplikacja:
         self.przycisk_zamknij.configure(text=self._t('WYJDŹ', 'QUIT'))
         self.przycisk_wyslij.configure(text=self._t('WYŚLIJ', 'SEND'))
         self._ustaw_status()
+        self._odswiez_tryby()
 
     def _przelacz_jezyk(self):
         self.en = not self.en
@@ -217,7 +261,7 @@ class Aplikacja:
             print('BLAD: ' + komunikat, file=sys.stderr)
             messagebox.showerror(self._t('Brak picklebota', 'PickleBot missing'), komunikat)
             return
-        args = [BINAR, '--mode', self.var_tryb.get(), '--side', self.var_strona.get(),
+        args = [BINAR, '--mode', str(self._numer_trybu()), '--side', self.var_strona.get(),
                 '--time', self.var_czas.get()]
         args.append('--verbose' if self.var_verbose.get() else '--noverbose')
         if self.en:
@@ -403,7 +447,7 @@ class Aplikacja:
 
 
 def main():
-    jezyk_en = '--en' in sys.argv or '--english' in sys.argv
+    jezyk_en = not ('--pl' in sys.argv or '--polski' in sys.argv)
     try:
         Aplikacja(jezyk_en=jezyk_en)
     except tk.TclError as e:

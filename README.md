@@ -55,7 +55,7 @@ A `weighted()` function blends these into a single score according to the active
 
 ### Bilingual
 
-🇬🇧🇵🇱 The interface is **bilingual** — Polish by default, switchable to English at any time with the `--en` flag, or mid-game by typing `language en` / `language pl` (or `jezyk en` / `jezyk pl`) where you would enter a move.
+🇬🇧🇵🇱 The interface is **bilingual** — English by default, switchable to Polish at any time with the `--pl` flag, or mid-game by typing `language pl` / `language en` (or `jezyk pl` / `jezyk en`) where you would enter a move.
 
 ## Usage
 
@@ -72,8 +72,8 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 
 | Flag | Effect |
 |------|--------|
-| `--en`, `--ang`, `--english` | run the interface in English |
-| `--pl`, `--polski` | run the interface in Polish (default) |
+| `--en`, `--ang`, `--english` | run the interface in English (default) |
+| `--pl`, `--polski` | run the interface in Polish |
 | `--verbose`, `-v` | show the bot's thinking |
 | `--noverbose`, `--silent` | no verbose mode |
 | `--mode N` | bot mode 1-4 (aggressive / offensive / defensive / guarding) |
@@ -100,7 +100,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 python3 picklebot_gui.py
 ```
 
-The panel lets you pick the bot mode, your side, the time limit and verbose mode, then shows the board, whose turn it is, the game log and a move entry. Move pieces by **clicking** them (select a piece, then click its destination) or by typing into the move entry. Everything the engine says — and every board — is also echoed to the terminal. Start it with `--en` to begin in English.
+The panel lets you pick the bot mode (by name — Aggressive, Offensive, Defensive, Guarding — with a short description underneath), your side, the time limit and verbose mode, then shows the board, whose turn it is, the game log and a move entry. Move pieces by **clicking** them (select a piece, then click its destination) or by typing into the move entry. Everything the engine says — and every board — is also echoed to the terminal. It starts in English; pass `--pl` to begin in Polish.
 
 ## TODO
 

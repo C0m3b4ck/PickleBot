@@ -46,8 +46,8 @@ void print_usage()
 {
     std::cout << "///===--- PickleBot ---===///\n";
     std::cout << tl("Opcje:", "Options:") << "\n";
-    std::cout << "  --en, --ang, --english    " << tl("interfejs angielski", "English UI") << "\n";
-    std::cout << "  --pl, --polski            " << tl("interfejs polski (domyślny)", "Polish UI (default)") << "\n";
+    std::cout << "  --en, --ang, --english    " << tl("interfejs angielski (domyślny)", "English UI (default)") << "\n";
+    std::cout << "  --pl, --polski            " << tl("interfejs polski", "Polish UI") << "\n";
     std::cout << "  --verbose, -v             " << tl("tryb verbose (myślenie bota)", "verbose mode (bot thinking)") << "\n";
     std::cout << "  --noverbose, --silent      " << tl("bez trybu verbose", "no verbose mode") << "\n";
     std::cout << "  --mode N                  " << tl("tryb bota 1-4", "bot mode 1-4") << "\n";

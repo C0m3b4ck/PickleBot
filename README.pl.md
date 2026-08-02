@@ -55,7 +55,7 @@ Funkcja `weighted()` łączy je w jeden wynik zgodnie z aktywnym **trybem bota**
 
 ### Dwujęzyczność
 
-🇵🇱🇬🇧 Interfejs jest **dwujęzyczny** — domyślnie polski, w dowolnym momencie przełączysz go na angielski flagą `--en`, albo w trakcie gry wpisując `language en` / `language pl` (lub `jezyk en` / `jezyk pl`) w miejscu, gdzie wpisuje się ruch.
+🇵🇱🇬🇧 Interfejs jest **dwujęzyczny** — domyślnie angielski, w dowolnym momencie przełączysz go na polski flagą `--pl`, albo w trakcie gry wpisując `language pl` / `language en` (lub `jezyk pl` / `jezyk en`) w miejscu, gdzie wpisuje się ruch.
 
 ## Użycie
 
@@ -72,8 +72,8 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 
 | Flaga | Działanie |
 |-------|-----------|
-| `--en`, `--ang`, `--english` | uruchomienie po angielsku |
-| `--pl`, `--polski` | uruchomienie po polsku (domyślnie) |
+| `--en`, `--ang`, `--english` | uruchomienie po angielsku (domyślnie) |
+| `--pl`, `--polski` | uruchomienie po polsku |
 | `--verbose`, `-v` | pokazuje myślenie bota |
 | `--noverbose`, `--silent` | bez trybu verbose |
 | `--mode N` | tryb bota 1-4 (agresywny / ofensywny / defensywny / ochronny) |
@@ -100,7 +100,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 python3 picklebot_gui.py
 ```
 
-Panel pozwala wybrać tryb bota, twoją stronę, limit czasu i tryb verbose, a potem pokazuje szachownicę, czyją jest tura, dziennik gry i pole na ruchy. Figurami ruszasz **klikając** je (wybierz figurę, potem kliknij pole docelowe) albo wpisując ruch do pola. Wszystko, co mówi silnik — i każda szachownica — jest też wypisywane do terminala. Uruchom z `--en`, aby zacząć po angielsku.
+Panel pozwala wybrać tryb bota (po nazwie — Agresywny, Ofensywny, Defensywny, Ochronny — z krótkim opisem pod spodem), twoją stronę, limit czasu i tryb verbose, a potem pokazuje szachownicę, czyją jest tura, dziennik gry i pole na ruchy. Figurami ruszasz **klikając** je (wybierz figurę, potem kliknij pole docelowe) albo wpisując ruch do pola. Wszystko, co mówi silnik — i każda szachownica — jest też wypisywane do terminala. Zaczyna po angielsku; podaj `--pl`, aby zacząć po polsku.
 
 ## TODO
 
