@@ -1,4 +1,8 @@
 # PickleBot
+![version](https://img.shields.io/badge/version-1.0-blue) ![language](https://img.shields.io/badge/language-english-green) ![cpp](https://img.shields.io/badge/engine-C%2B%2B17-blue) ![python](https://img.shields.io/badge/gui-Python%203%20%2B%20Tkinter-green)
+
+**🇵🇱🇵🇱🇵🇱 Made in Poland 🇵🇱🇵🇱🇵🇱**
+[🇵🇱 Przeczytaj po polsku!](README.pl.md)
 
 **A chess bot made in C++, using algorithms and evaluation methods to play instead of a pre-trained ML model.**
 
@@ -49,23 +53,54 @@ A `weighted()` function blends these into a single score according to the active
 3. **Defensive** – guards its own position.
 4. **Guarding** – defensive focus on the king.
 
+### Bilingual
+
+🇬🇧🇵🇱 The interface is **bilingual** — Polish by default, switchable to English at any time with the `--en` flag, or mid-game by typing `language en` / `language pl` (or `jezyk en` / `jezyk pl`) where you would enter a move.
+
 ## Usage
 
-Build with a C++17 compiler:
+### Build
+
+Compile with a C++17 compiler:
 
 ```sh
-g++ -std=c++17 -O2 main.cpp board.cpp evaluate.cpp search.cpp -o picklebot
-./picklebot
+g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
+    main.cpp board.cpp evaluate.cpp search.cpp lang.cpp -o picklebot
 ```
 
-On startup you're asked for:
+### Command-line flags
+
+| Flag | Effect |
+|------|--------|
+| `--en`, `--ang`, `--english` | run the interface in English |
+| `--pl`, `--polski` | run the interface in Polish (default) |
+| `--verbose`, `-v` | show the bot's thinking |
+| `--noverbose`, `--silent` | no verbose mode |
+| `--mode N` | bot mode 1-4 (aggressive / offensive / defensive / guarding) |
+| `--side W\|B\|R` | your side: White, Black or Random |
+| `--time N` | time limit in seconds per side (0 = none) |
+| `--help`, `-h` | show usage and exit |
+
+On startup you're asked for anything you didn't pass as a flag:
 
 - the **bot mode** (1-4),
 - your **side** (White / Black / Random),
 - a **time limit** in seconds per side (0 for none),
-- whether to enable **verbose mode** (shows the bot's thinking: move scores, search depth, time, predicted reply).
+- whether to enable **verbose mode**.
 
 Moves are entered as algebraic squares, e.g. `e2 e4`.
+
+### GUI
+
+A Tkinter GUI (modelled on the Decoder-Malfunction-Simulator's `dekoder_gui.py`) runs the engine as a subprocess:
+
+```sh
+g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
+    main.cpp board.cpp evaluate.cpp search.cpp lang.cpp -o picklebot
+python3 picklebot_gui.py
+```
+
+The panel lets you pick the bot mode, your side, the time limit and verbose mode, then shows the board, the game log and a move entry. Start it with `--en` to begin in English.
 
 ## TODO
 

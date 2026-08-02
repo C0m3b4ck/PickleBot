@@ -5,9 +5,14 @@
 #include <chrono> //for time limits
 #include <random> //for random side selection
 #include <limits> //for input validation
+#include <cstdlib> //for atoi / exit
+#include <cctype> //for toupper
+#include <unistd.h> //for isatty (GUI live output detection)
+#include <cstdio> //for fileno
 #include "board.hpp"
 #include "evaluate.hpp"
 #include "search.hpp"
+#include "lang.hpp"
 
 // ---=== GLOBAL VARIABLES ===---
 Board game = {
@@ -31,6 +36,62 @@ short bot_mode = 0; //aggressigve, offensive, defensive, guarding
 bool verbose_mode = false; //true to show the bot's thinking
 long player_time_used_ms = 0; //human side clock
 long bot_time_used_ms = 0; //bot side clock
+
+// ---=== CLI FLAGS ===---
+// mirrors the Decoder-Malfunction-Simulator's flag handling (--en/--english ...)
+bool flag_bot_mode = false, flag_side = false, flag_time = false, flag_verbose = false;
+bool side_random = false; //set by --side R
+
+void print_usage()
+{
+    std::cout << "///===--- PickleBot ---===///\n";
+    std::cout << tl("Opcje:", "Options:") << "\n";
+    std::cout << "  --en, --ang, --english    " << tl("interfejs angielski", "English UI") << "\n";
+    std::cout << "  --pl, --polski            " << tl("interfejs polski (domyślny)", "Polish UI (default)") << "\n";
+    std::cout << "  --verbose, -v             " << tl("tryb verbose (myślenie bota)", "verbose mode (bot thinking)") << "\n";
+    std::cout << "  --noverbose, --silent      " << tl("bez trybu verbose", "no verbose mode") << "\n";
+    std::cout << "  --mode N                  " << tl("tryb bota 1-4", "bot mode 1-4") << "\n";
+    std::cout << "  --side W|B|R              " << tl("twoja strona: Białe, Czarne lub Losowo", "your side: White, Black or Random") << "\n";
+    std::cout << "  --time N                  " << tl("limit czasu w sekundach na stronę (0 = brak)", "time limit in seconds per side (0 = none)") << "\n";
+    std::cout << "  --help, -h                " << tl("ta pomoc", "this help") << "\n";
+}
+
+void parse_flags(int argc, char** argv)
+{
+    for (int i = 1; i < argc; i++)
+    {
+        std::string a = argv[i];
+        if (a == "--en" || a == "--ang" || a == "--english") set_english(true);
+        else if (a == "--pl" || a == "--polski") set_english(false);
+        else if (a == "--verbose" || a == "-v") { verbose_mode = true; flag_verbose = true; }
+        else if (a == "--noverbose" || a == "--silent") { verbose_mode = false; flag_verbose = true; }
+        else if (a == "--mode" && i + 1 < argc)
+        {
+            bot_mode = (short)atoi(argv[++i]);
+            if (bot_mode < 1 || bot_mode > 4) bot_mode = 1;
+            flag_bot_mode = true;
+        }
+        else if (a == "--side" && i + 1 < argc)
+        {
+            std::string s = argv[++i];
+            if (!s.empty())
+            {
+                char c = toupper(s[0]);
+                if (c == 'W') playerWhite = true;
+                else if (c == 'B') playerWhite = false;
+                else side_random = true;
+            }
+            flag_side = true;
+        }
+        else if ((a == "--time" || a == "-t") && i + 1 < argc)
+        {
+            time_limit = (short)atoi(argv[++i]);
+            if (time_limit < 0) time_limit = 0;
+            flag_time = true;
+        }
+        else if (a == "--help" || a == "-h") { print_usage(); exit(0); }
+    }
+}
 
 // ---=== PRE-DEFINITIONS ===---
 void get_side_random();
@@ -58,11 +119,13 @@ short prompt_number(short lo, short hi)
         if (!read_int(v))
         {
             if (input_ended) return lo;
-            std::cout << "!!! Invalid choice - please reselect !!! \n";
+            std::cout << tl("!!! Nieprawidłowy wybór - wybierz ponownie !!!",
+                            "!!! Invalid choice - please reselect !!!") << "\n";
             continue;
         }
         if (v >= lo && v <= hi) return v;
-        std::cout << "!!! Invalid choice - please reselect !!! \n";
+        std::cout << tl("!!! Nieprawidłowy wybór - wybierz ponownie !!!",
+                        "!!! Invalid choice - please reselect !!!") << "\n";
     }
 }
 // parse an algebraic square like "e4" into a board index; false on bad input
@@ -80,47 +143,67 @@ void greet()
 {
     std::cout << "///===--- PickleBot ---===/// \n";
     std::cout << "/=- By C0m3b4ck under APL 2.0 -=/ \n";
+    std::cout << tl("Wpisz `language en` (lub `jezyk pl`) w trakcie gry, aby przełączyć język.",
+                    "Type `language pl` (or `jezyk en`) during a game to switch the language.") << "\n";
 }
 void goodbye()
 {
-    std::cout << "/> Goodbye from PickleBot /> \n"; 
+    std::cout << "/> " << tl("Do widzenia od PickleBota", "Goodbye from PickleBot") << " /> \n"; 
 }
 void get_settings()
 {
     // get bot mode
-    std::cout << "Input bot mode number: \n";
-    std::cout << "[1] Aggressive (material) \n";
-    std::cout << "[2] Offensive (focus on king) \n";
-    std::cout << "[3] Defensive (material) \n";
-    std::cout << "[4] Guarding (defensive focus on king) \n";
-    std::cout << "Your choice: ";
-    bot_mode = prompt_number(1, 4);
-    if (input_ended) return;
-    // get starting side
-    std::cout << "Input player (your) side: \n";
-    std::cout << "[1] White \n";
-    std::cout << "[2] Black \n";
-    std::cout << "[3] Random \n";
-    std::cout << "Your choice: ";
-    short choice = prompt_number(1, 3);
-    if (input_ended) return;
-    switch (choice)
+    if (!flag_bot_mode)
     {
-        case 1: playerWhite = true; break;
-        case 2: playerWhite = false; break;
-        case 3: get_side_random(); break;
+        std::cout << tl("Podaj numer trybu bota:", "Input bot mode number:") << "\n";
+        std::cout << "[1] " << tl("Agresywny (materiał)", "Aggressive (material)") << "\n";
+        std::cout << "[2] " << tl("Ofensywny (koncentracja na królu)", "Offensive (focus on king)") << "\n";
+        std::cout << "[3] " << tl("Defensywny (materiał)", "Defensive (material)") << "\n";
+        std::cout << "[4] " << tl("Ochronny (defensywny nacisk na króla)", "Guarding (defensive focus on king)") << "\n";
+        std::cout << tl("Twój wybór:", "Your choice:") << " ";
+        bot_mode = prompt_number(1, 4);
+        if (input_ended) return;
+    }
+    // get starting side
+    if (flag_side)
+    {
+        if (side_random) get_side_random();
+    }
+    else
+    {
+        std::cout << tl("Podaj stronę (twoją):", "Input player (your) side:") << "\n";
+        std::cout << "[1] " << tl("Białe", "White") << "\n";
+        std::cout << "[2] " << tl("Czarne", "Black") << "\n";
+        std::cout << "[3] " << tl("Losowo", "Random") << "\n";
+        std::cout << tl("Twój wybór:", "Your choice:") << " ";
+        short choice = prompt_number(1, 3);
+        if (input_ended) return;
+        switch (choice)
+        {
+            case 1: playerWhite = true; break;
+            case 2: playerWhite = false; break;
+            case 3: get_side_random(); break;
+        }
     }
     // time limit value
-    std::cout << "Input time limit in seconds per side (0 for none): ";
-    if (!read_int(time_limit)) time_limit = 0;
-    if (time_limit < 0) time_limit = 0;
+    if (!flag_time)
+    {
+        std::cout << tl("Podaj limit czasu w sekundach na stronę (0 = brak):",
+                        "Input time limit in seconds per side (0 for none):") << " ";
+        if (!read_int(time_limit)) time_limit = 0;
+        if (time_limit < 0) time_limit = 0;
+    }
     // verbose mode
-    std::cout << "Enable verbose mode (show bot thinking)? \n";
-    std::cout << "[1] Yes \n";
-    std::cout << "[2] No \n";
-    std::cout << "Your choice: ";
-    short verb = prompt_number(1, 2);
-    verbose_mode = (verb == 1);
+    if (!flag_verbose)
+    {
+        std::cout << tl("Włączyć tryb verbose (pokazywanie myślenia bota)?",
+                        "Enable verbose mode (show bot thinking)?") << "\n";
+        std::cout << "[1] " << tl("Tak", "Yes") << "\n";
+        std::cout << "[2] " << tl("Nie", "No") << "\n";
+        std::cout << tl("Twój wybór:", "Your choice:") << " ";
+        short verb = prompt_number(1, 2);
+        verbose_mode = (verb == 1);
+    }
 }
 void print_board()
 {
@@ -134,13 +217,20 @@ void print_board()
     }
     std::cout << "\n";
 }
+// machine-readable board dump for the GUI: "@BOARD@ " + 64 squares, row-major
+void emit_board()
+{
+    std::cout << "@BOARD@ ";
+    for (short i = 0; i < 64; i++) std::cout << game.sq[i];
+    std::cout << "\n";
+}
 
 void player_move()
 {
     auto start_time = std::chrono::steady_clock::now();
     while (true)
     {
-        std::cout << "Input move (from, to): ";
+        std::cout << tl("Podaj ruch (skąd, dokąd): ", "Input move (from, to): ");
         std::string from, to;
         if (!(std::cin >> from >> to))
         {
@@ -148,30 +238,44 @@ void player_move()
             return;
         }
 
+        // runtime language switch (like the DMS `language en/pl` command)
+        if (from == "language" || from == "lang" || from == "jezyk")
+        {
+            if (to == "en" || to == "english" || to == "ang") { set_english(true); std::cout << "Language set to English.\n"; }
+            else if (to == "pl" || to == "polski") { set_english(false); std::cout << "Język ustawiony na polski.\n"; }
+            else std::cout << tl("Użycie: `language en` / `language pl` (lub `jezyk en/pl`)",
+                                 "Usage: `language en` / `language pl` (or `jezyk en/pl`)") << "\n";
+            continue;
+        }
+
         short from_num, to_num;
         if (!parse_square(from, from_num) || !parse_square(to, to_num))
         {
-            std::cout << "!!! Invalid move - bad square name !!! \n";
+            std::cout << tl("!!! Nieprawidłowy ruch - zła nazwa pola !!!",
+                            "!!! Invalid move - bad square name !!!") << "\n";
             continue;
         }
 
         // check 1: piece ownership
         if (!is_player_piece(game.sq[from_num], playerWhite))
         {
-            std::cout << "!!! Invalid move - not your piece !!! \n";
+            std::cout << tl("!!! Nieprawidłowy ruch - to nie twoja figura !!!",
+                            "!!! Invalid move - not your piece !!!") << "\n";
             continue;
         }
         // check 2: legal movement / path not obstructed
         if (!legal_move(game, from_num, to_num, playerWhite))
         {
-            std::cout << "!!! Invalid move - piece cannot move there !!! \n";
+            std::cout << tl("!!! Nieprawidłowy ruch - figura nie może tam się ruszyć !!!",
+                            "!!! Invalid move - piece cannot move there !!!") << "\n";
             continue;
         }
         // check 3: king not left in check
         Board out;
         if (!try_move(game, from_num, to_num, playerWhite, out))
         {
-            std::cout << "!!! Invalid move - king would be in check !!! \n";
+            std::cout << tl("!!! Nieprawidłowy ruch - król byłby pod szachem !!!",
+                            "!!! Invalid move - king would be in check !!!") << "\n";
             continue;
         }
         game = out;
@@ -183,7 +287,8 @@ void player_move()
                 std::chrono::steady_clock::now() - start_time).count();
             long remaining = (long)time_limit * 1000 - player_time_used_ms;
             if (remaining < 0) remaining = 0;
-            std::cout << "Player time left: " << remaining / 1000.0 << "s\n";
+            std::cout << tl("Czas gracza pozostał: ", "Player time left: ")
+                      << remaining / 1000.0 << "s\n";
         }
         return;
     }
@@ -192,10 +297,11 @@ void player_move()
 // ---=== GAME LOGIC ===---
 void get_side_random()
 {
-    std::cout << "Getting random side... \n";
+    std::cout << tl("Losowanie strony... ", "Getting random side... ") << "\n";
     static std::mt19937 rng{std::random_device{}()};
     playerWhite = (rng() % 2 == 0);
-    std::cout << "You will play as " << (playerWhite ? "White" : "Black") << ".\n";
+    std::cout << tl("Zagrasz jako ", "You will play as ")
+              << tl((playerWhite ? "Białe." : "Czarne."), (playerWhite ? "White." : "Black.")) << "\n";
 }
 
 // ends the game if the side about to move has no legal moves (checkmate or stalemate)
@@ -204,11 +310,12 @@ bool check_if_mate(bool side)
     if (!get_legal_moves(side).empty()) return false;
     if (king_in_check(game, side))
     {
-        std::cout << (side ? "Black" : "White") << " wins by checkmate!\n";
+        std::cout << (side ? tl("Czarne wygrywają przez mata!", "Black wins by checkmate!")
+                           : tl("Białe wygrywają przez mata!", "White wins by checkmate!")) << "\n";
     }
     else
     {
-        std::cout << "Stalemate - it's a draw.\n";
+        std::cout << tl("Pat - remis.", "Stalemate - it's a draw.") << "\n";
     }
     isVictory = true;
     return true;
@@ -221,6 +328,7 @@ void main_game_loop()
     {
         bool side = bot_turn ? !playerWhite : playerWhite;
         if (check_if_mate(side)) break;
+        emit_board(); //lets the GUI redraw the board
         if (bot_turn)
         {
             bot_move();
@@ -233,12 +341,19 @@ void main_game_loop()
         }
         bot_turn = !bot_turn;
     }
-    if (isVictory) print_board();
+    if (isVictory)
+    {
+        emit_board();
+        print_board();
+    }
 }
 
 // ---=== PROGRAM ENTRY ===---
-int main()
+int main(int argc, char** argv)
 {
+    parse_flags(argc, argv);
+    // when stdout is piped (e.g. to the GUI), flush every write so it arrives live
+    if (!isatty(fileno(stdout))) std::cout.setf(std::ios::unitbuf);
     greet();
     get_settings();
     main_game_loop();

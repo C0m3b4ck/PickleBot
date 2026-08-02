@@ -1,3 +1,5 @@
-* separate into files
-* finish logic
+* [x] separate into files
+* [x] bilingual PL/EN (--en/--pl flags, `language en/pl` command)
+* [x] GUI (Python 3 + Tkinter)
+* [ ] finish logic
 * [expansion] add more variables to algos and weights

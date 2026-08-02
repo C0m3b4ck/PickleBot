@@ -1,4 +1,8 @@
 # PickleBot
+![wersja](https://img.shields.io/badge/wersja-1.0-blue) ![jezyk](https://img.shields.io/badge/jezyk-polski-green) ![cpp](https://img.shields.io/badge/silnik-C%2B%2B17-blue) ![python](https://img.shields.io/badge/gui-Python%203%20%2B%20Tkinter-green)
+
+**🇵🇱🇵🇱🇵🇱Zrobione w Polsce🇵🇱🇵🇱🇵🇱**
+[🇬🇧 Read in English!](README.md)
 
 **Bot szachowy napisany w C++, używający algorytmów i metod oceny pozycji zamiast wytrenowanego modelu ML.**
 
@@ -49,23 +53,54 @@ Funkcja `weighted()` łączy je w jeden wynik zgodnie z aktywnym **trybem bota**
 3. **Defensywny** – chroni własną pozycję.
 4. **Ochronny** – defensywny nacisk na króla.
 
+### Dwujęzyczność
+
+🇵🇱🇬🇧 Interfejs jest **dwujęzyczny** — domyślnie polski, w dowolnym momencie przełączysz go na angielski flagą `--en`, albo w trakcie gry wpisując `language en` / `language pl` (lub `jezyk en` / `jezyk pl`) w miejscu, gdzie wpisuje się ruch.
+
 ## Użycie
+
+### Budowanie
 
 Skompiluj kompilatorem C++17:
 
 ```sh
-g++ -std=c++17 -O2 main.cpp board.cpp evaluate.cpp search.cpp -o picklebot
-./picklebot
+g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
+    main.cpp board.cpp evaluate.cpp search.cpp lang.cpp -o picklebot
 ```
 
-Na starcie zostaniesz zapytany o:
+### Flagi linii poleceń
+
+| Flaga | Działanie |
+|-------|-----------|
+| `--en`, `--ang`, `--english` | uruchomienie po angielsku |
+| `--pl`, `--polski` | uruchomienie po polsku (domyślnie) |
+| `--verbose`, `-v` | pokazuje myślenie bota |
+| `--noverbose`, `--silent` | bez trybu verbose |
+| `--mode N` | tryb bota 1-4 (agresywny / ofensywny / defensywny / ochronny) |
+| `--side B\|C\|L` | twoja strona: Białe, Czarne lub Losowo |
+| `--time N` | limit czasu w sekundach na stronę (0 = brak) |
+| `--help`, `-h` | pokazanie pomocy i wyjście |
+
+Na starcie zostaniesz zapytany o wszystko, czego nie podałeś flagami:
 
 - **tryb bota** (1-4),
 - twoją **stronę** (Białe / Czarne / Losowo),
 - **limit czasu** w sekundach na stronę (0 = brak),
-- czy włączyć **tryb verbose** (pokazuje myślenie bota: oceny ruchów, głębokość przeszukiwania, czas, przewidywaną odpowiedź).
+- czy włączyć **tryb verbose**.
 
 Ruchy wpisuje się w notacji algebraicznej, np. `e2 e4`.
+
+### GUI
+
+GUI w Tkinter (wzorowany na `dekoder_gui.py` z Symulatora Awarii Dekodera) uruchamia silnik jako podproces:
+
+```sh
+g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
+    main.cpp board.cpp evaluate.cpp search.cpp lang.cpp -o picklebot
+python3 picklebot_gui.py
+```
+
+Panel pozwala wybrać tryb bota, twoją stronę, limit czasu i tryb verbose, a potem pokazuje szachownicę, dziennik gry i pole na ruchy. Uruchom z `--en`, aby zacząć po angielsku.
 
 ## TODO
 

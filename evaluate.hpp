@@ -27,7 +27,8 @@ struct MoveEval
 // convert a board index (0 = a8) to algebraic square name like "e4"
 std::string square_name(short sq);
 
-const char* bot_mode_name();
+// name of the current bot personality (translated per active language)
+std::string bot_mode_name();
 
 // combines the raw evaluation components according to the current bot personality
 long weighted(long material, long proximity, long check, long expose);

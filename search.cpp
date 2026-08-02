@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cctype>
 #include "search.hpp"
+#include "lang.hpp"
 
 // negamax with alpha-beta pruning; sets `aborted` if the time deadline is hit
 long negamax(const Board& st, bool toMove, int depth, long alpha, long beta,
@@ -101,7 +102,7 @@ void bot_move()
     std::vector<std::pair<short, short>> moves = get_legal_moves(botWhite);
     if (moves.empty())
     {
-        std::cout << "!!! Bot has no legal moves !!! \n";
+        std::cout << tl("!!! Bot nie ma legalnych ruchów !!!", "!!! Bot has no legal moves !!!") << "\n";
         return;
     }
 
@@ -113,8 +114,8 @@ void bot_move()
 
     if (verbose_mode)
     {
-        std::cout << "--- Bot thinking (mode: " << bot_mode_name() << ") ---\n";
-        std::cout << "Legal moves found: " << nmoves << "\n";
+        std::cout << "--- " << tl("Myślenie bota (tryb: ", "Bot thinking (mode: ") << bot_mode_name() << ") ---\n";
+        std::cout << tl("Znaleziono legalnych ruchów: ", "Legal moves found: ") << nmoves << "\n";
         for (size_t i = 0; i < nmoves; i++)
         {
             const MoveEval& e = evals[i];
@@ -147,7 +148,8 @@ void bot_move()
     if (verbose_mode)
     {
         const MoveEval& e = evals[best_index];
-        std::cout << "  -> Depth 1 best: " << square_name(e.from) << "->" << square_name(e.to)
+        std::cout << "  -> " << tl("Głębokość 1 najlepszy: ", "Depth 1 best: ")
+                  << square_name(e.from) << "->" << square_name(e.to)
                   << " (score " << e.final << ")"
                   << " | capture=" << e.capture_score
                   << " proximity=" << e.proximity_score
@@ -190,20 +192,21 @@ void bot_move()
 
     if (verbose_mode)
     {
-        std::cout << "  -> Searched to depth " << reached_depth
-                  << " in " << elapsed_ms << " ms"
+        std::cout << "  -> " << tl("Przeszukano do głębokości ", "Searched to depth ")
+                  << reached_depth << " " << tl("w ", "in ") << elapsed_ms << " ms"
                   << " (max " << max_depth << ")\n";
-        std::cout << "  -> Final choice: " << square_name(best_from) << "->"
-                  << square_name(best_to) << "\n";
+        std::cout << "  -> " << tl("Ostateczny wybór: ", "Final choice: ")
+                  << square_name(best_from) << "->" << square_name(best_to) << "\n";
         std::pair<short, short> reply = predict_opponent_reply(botWhite);
         if (reply.first >= 0)
         {
-            std::cout << "  -> Predicted reply: " << square_name(reply.first)
-                      << "->" << square_name(reply.second) << "\n";
+            std::cout << "  -> " << tl("Przewidywana odpowiedź: ", "Predicted reply: ")
+                      << square_name(reply.first) << "->" << square_name(reply.second) << "\n";
         }
         else
         {
-            std::cout << "  -> Predicted reply: none (opponent has no legal moves)\n";
+            std::cout << "  -> " << tl("Przewidywana odpowiedź: brak (przeciwnik nie ma legalnych ruchów)",
+                                       "Predicted reply: none (opponent has no legal moves)") << "\n";
         }
     }
 
@@ -214,9 +217,11 @@ void bot_move()
     {
         long remaining = (long)time_limit * 1000 - bot_time_used_ms;
         if (remaining < 0) remaining = 0;
-        std::cout << "Bot time left: " << remaining / 1000.0 << "s\n";
+        std::cout << tl("Czas bota pozostał: ", "Bot time left: ") << remaining / 1000.0 << "s\n";
     }
 
-    std::cout << "Bot moves " << (char)('a' + best_from % 8) << (8 - best_from / 8)
-              << " to " << (char)('a' + best_to % 8) << (8 - best_to / 8) << "\n";
+    std::cout << tl("Ruch bota: ", "Bot moves ")
+              << (char)('a' + best_from % 8) << (8 - best_from / 8)
+              << " " << tl("na ", "to ")
+              << (char)('a' + best_to % 8) << (8 - best_to / 8) << "\n";
 }

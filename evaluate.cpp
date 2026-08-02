@@ -1,5 +1,6 @@
 // ---=== BOT LOGIC / EVALUATION ===---
 #include "evaluate.hpp"
+#include "lang.hpp"
 
 short piece_value(char c)
 {
@@ -24,15 +25,15 @@ std::string square_name(short sq)
     return s;
 }
 
-const char* bot_mode_name()
+std::string bot_mode_name()
 {
     switch (bot_mode)
     {
-        case 1: return "Aggressive (material)";
-        case 2: return "Offensive (focus on king)";
-        case 3: return "Defensive (material)";
-        case 4: return "Guarding (defensive focus on king)";
-        default: return "Unknown";
+        case 1: return tl("Agresywny (materiał)", "Aggressive (material)");
+        case 2: return tl("Ofensywny (koncentracja na królu)", "Offensive (focus on king)");
+        case 3: return tl("Defensywny (materiał)", "Defensive (material)");
+        case 4: return tl("Ochronny (defensywny nacisk na króla)", "Guarding (defensive focus on king)");
+        default: return tl("Nieznany", "Unknown");
     }
 }
 

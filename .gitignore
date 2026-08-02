@@ -1,4 +1,6 @@
 main
 prog
+picklebot
 *.py
+!picklebot_gui.py
 __pycache__
