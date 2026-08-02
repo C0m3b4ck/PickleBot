@@ -13,8 +13,31 @@ const long INF = 1000000000;
 const long MATE = 1000000;
 const int PREDICT_DEPTH = 3; // depth used for predicted opponent replies
 
+// ---=== TRANSPOSITION TABLE ===---
+// caches already-searched positions so the iterative deepening loop never
+// re-explores the same position at the same depth more than once
+struct TTEntry
+{
+    uint64_t key = 0;
+    long score = 0;
+    short depth = 0;
+    unsigned char flag = 0; // 0 = exact, 1 = lower bound, 2 = upper bound
+};
+
+const int TT_SIZE = 1 << 20; // entries (~24 MB); enough for a hobby engine
+const uint64_t TT_MASK = TT_SIZE - 1;
+
+extern TTEntry g_tt[TT_SIZE];
+
+// deterministic 64-bit key for a position + side to move
+uint64_t position_key(const Board& b, bool toMove);
+
 // negamax with alpha-beta pruning; sets `aborted` if the time deadline is hit
 long negamax(const Board& st, bool toMove, int depth, long alpha, long beta,
+             const std::chrono::steady_clock::time_point& deadline, bool& aborted);
+
+// captures/promotions-only search at the horizon, so tactics aren't cut off
+long quiesce(const Board& st, bool toMove, long alpha, long beta,
              const std::chrono::steady_clock::time_point& deadline, bool& aborted);
 
 struct SearchResult

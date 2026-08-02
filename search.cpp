@@ -4,6 +4,72 @@
 #include "search.hpp"
 #include "lang.hpp"
 
+TTEntry g_tt[TT_SIZE];
+
+// deterministic 64-bit key for a position + side to move (FNV-1a over the board)
+uint64_t position_key(const Board& b, bool toMove)
+{
+    uint64_t h = 1469598103934665603ULL;
+    const uint64_t fnv = 1099511628211ULL;
+    for (int i = 0; i < 64; i++)
+    {
+        h ^= (unsigned char)b.sq[i];
+        h *= fnv;
+    }
+    h ^= (uint64_t)(b.ep + 1); h *= fnv;
+    h ^= b.wks ? 1 : 0; h *= fnv;
+    h ^= b.wqs ? 1 : 0; h *= fnv;
+    h ^= b.bks ? 1 : 0; h *= fnv;
+    h ^= b.bqs ? 1 : 0; h *= fnv;
+    h ^= toMove ? 0x9E3779B97F4A7C15ULL : 0; h *= fnv;
+    return h;
+}
+
+// captures/promotions-only search at the horizon, so tactics aren't cut off
+long quiesce(const Board& st, bool toMove, long alpha, long beta,
+             const std::chrono::steady_clock::time_point& deadline, bool& aborted)
+{
+    if (aborted) return 0;
+    if (std::chrono::steady_clock::now() > deadline) { aborted = true; return 0; }
+
+    // stand pat: if even this quiet position beats beta, the opponent won't
+    // let us reach it
+    long stand = evaluate(st, toMove);
+    if (stand >= beta) return stand;
+    if (stand > alpha) alpha = stand;
+
+    auto moves = generate_legal_moves(st, toMove);
+    // keep only tactical moves: captures, en passant, pawn promotions
+    std::vector<std::pair<long, size_t>> ord;
+    ord.reserve(moves.size());
+    for (size_t i = 0; i < moves.size(); i++)
+    {
+        char target = st.sq[moves[i].second];
+        bool is_capture = target != ' '
+            || (moves[i].second == st.ep && toupper(st.sq[moves[i].first]) == 'P'
+                && moves[i].first % 8 != moves[i].second % 8);
+        bool is_promo = toupper(st.sq[moves[i].first]) == 'P'
+            && moves[i].second / 8 == (toMove ? 0 : 7);
+        if (!is_capture && !is_promo) continue;
+        long key = piece_value(target) * PIECE_SCALE;
+        if (key <= 0) key = 1; // promotions / en passant
+        ord.push_back({key, i});
+    }
+    std::sort(ord.begin(), ord.end(),
+              [](const std::pair<long, size_t>& a, const std::pair<long, size_t>& b)
+              { return a.first > b.first; });
+
+    for (auto& e : ord)
+    {
+        Board child = st;
+        make_move(child, moves[e.second].first, moves[e.second].second, toMove);
+        long s = -quiesce(child, !toMove, -beta, -alpha, deadline, aborted);
+        if (aborted) return 0;
+        if (s > alpha) { alpha = s; if (alpha >= beta) break; }
+    }
+    return alpha;
+}
+
 // negamax with alpha-beta pruning; sets `aborted` if the time deadline is hit
 long negamax(const Board& st, bool toMove, int depth, long alpha, long beta,
              const std::chrono::steady_clock::time_point& deadline, bool& aborted)
@@ -11,45 +77,84 @@ long negamax(const Board& st, bool toMove, int depth, long alpha, long beta,
     if (aborted) return 0;
     if (std::chrono::steady_clock::now() > deadline) { aborted = true; return 0; }
 
+    long alpha_orig = alpha;
+
+    // transposition table probe: reuse a finished search at >= this depth
+    uint64_t key = position_key(st, toMove);
+    TTEntry& ent = g_tt[key & TT_MASK];
+    if (ent.key == key && ent.depth >= depth)
+    {
+        if (ent.flag == 0) return ent.score;
+        if (ent.flag == 1 && ent.score > alpha) alpha = ent.score;
+        if (ent.flag == 2 && ent.score < beta) beta = ent.score;
+        if (alpha >= beta) return ent.score;
+    }
+
     auto moves = generate_legal_moves(st, toMove);
+    long result;
+    unsigned char flag = 0;
+    bool store = false;
     if (moves.empty())
-        return king_in_check(st, toMove) ? -MATE : 0;
-    if (depth == 0)
-        return evaluate(st, toMove);
-
-    // order moves by estimated value (captures first) for better pruning
-    std::vector<std::pair<long, size_t>> ord;
-    ord.reserve(moves.size());
-    for (size_t i = 0; i < moves.size(); i++)
     {
-        long key = 0;
-        char target = st.sq[moves[i].second];
-        if (target != ' ')
-            key += piece_value(target) * PIECE_SCALE;
-        else if (moves[i].second == st.ep && toupper(st.sq[moves[i].first]) == 'P'
-                 && moves[i].first % 8 != moves[i].second % 8)
-            key += PIECE_SCALE; // en passant capture
-        if (toupper(st.sq[moves[i].first]) == 'P'
-            && moves[i].second / 8 == (toMove ? 0 : 7))
-            key += 5; // promoting pawn
-        ord.push_back({key, i});
+        result = king_in_check(st, toMove) ? -MATE : 0;
+        flag = 0;
+        store = true;
     }
-    std::sort(ord.begin(), ord.end(),
-              [](const std::pair<long, size_t>& a, const std::pair<long, size_t>& b)
-              { return a.first > b.first; });
-
-    long best = -INF;
-    for (auto& e : ord)
+    else if (depth == 0)
     {
-        Board child = st;
-        make_move(child, moves[e.second].first, moves[e.second].second, toMove);
-        long s = -negamax(child, !toMove, depth - 1, -beta, -alpha, deadline, aborted);
+        result = quiesce(st, toMove, alpha, beta, deadline, aborted);
         if (aborted) return 0;
-        if (s > best) best = s;
-        if (best > alpha) alpha = best;
-        if (alpha >= beta) break;
+        store = false; // quiesce returns a bound, not an exact score
     }
-    return best;
+    else
+    {
+        // order moves by estimated value (captures first) for better pruning
+        std::vector<std::pair<long, size_t>> ord;
+        ord.reserve(moves.size());
+        for (size_t i = 0; i < moves.size(); i++)
+        {
+            long key = 0;
+            char target = st.sq[moves[i].second];
+            if (target != ' ')
+                key += piece_value(target) * PIECE_SCALE;
+            else if (moves[i].second == st.ep && toupper(st.sq[moves[i].first]) == 'P'
+                     && moves[i].first % 8 != moves[i].second % 8)
+                key += PIECE_SCALE; // en passant capture
+            if (toupper(st.sq[moves[i].first]) == 'P'
+                && moves[i].second / 8 == (toMove ? 0 : 7))
+                key += 5; // promoting pawn
+            ord.push_back({key, i});
+        }
+        std::sort(ord.begin(), ord.end(),
+                  [](const std::pair<long, size_t>& a, const std::pair<long, size_t>& b)
+                  { return a.first > b.first; });
+
+        long best = -INF;
+        for (auto& e : ord)
+        {
+            Board child = st;
+            make_move(child, moves[e.second].first, moves[e.second].second, toMove);
+            long s = -negamax(child, !toMove, depth - 1, -beta, -alpha, deadline, aborted);
+            if (aborted) return 0;
+            if (s > best) best = s;
+            if (best > alpha) alpha = best;
+            if (alpha >= beta) break;
+        }
+        if (best <= alpha_orig) flag = 2; // fail-low: upper bound
+        else if (best >= beta) flag = 1;  // fail-high: lower bound
+        else flag = 0;                    // exact
+        result = best;
+        store = true;
+    }
+
+    if (store && !aborted)
+    {
+        ent.key = key;
+        ent.score = result;
+        ent.depth = (short)depth;
+        ent.flag = flag;
+    }
+    return result;
 }
 
 // searches the current global position to `depth`; `root_scores` optionally orders the root moves
