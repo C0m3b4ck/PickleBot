@@ -217,10 +217,10 @@ void print_board()
     }
     std::cout << "\n";
 }
-// machine-readable board dump for the GUI: "@BOARD@ " + 64 squares, row-major
-void emit_board()
+// machine-readable state dump for the GUI: "@BOARD@ <W|B> " + 64 squares, row-major
+void emit_board(bool turn_white)
 {
-    std::cout << "@BOARD@ ";
+    std::cout << "@BOARD@ " << (turn_white ? 'W' : 'B') << " ";
     for (short i = 0; i < 64; i++) std::cout << game.sq[i];
     std::cout << "\n";
 }
@@ -328,7 +328,7 @@ void main_game_loop()
     {
         bool side = bot_turn ? !playerWhite : playerWhite;
         if (check_if_mate(side)) break;
-        emit_board(); //lets the GUI redraw the board
+        emit_board(side); //lets the GUI redraw the board
         if (bot_turn)
         {
             bot_move();
@@ -343,7 +343,7 @@ void main_game_loop()
     }
     if (isVictory)
     {
-        emit_board();
+        emit_board(playerWhite);
         print_board();
     }
 }
@@ -356,6 +356,8 @@ int main(int argc, char** argv)
     if (!isatty(fileno(stdout))) std::cout.setf(std::ios::unitbuf);
     greet();
     get_settings();
+    // let the GUI know the player's colour (needed for click-to-move)
+    std::cout << "@SIDE@ " << (playerWhite ? 'W' : 'B') << "\n";
     main_game_loop();
     goodbye();
     return 0;

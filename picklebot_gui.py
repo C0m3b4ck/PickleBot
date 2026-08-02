@@ -22,6 +22,7 @@ KATALOG = os.path.dirname(os.path.abspath(__file__))
 BINAR = os.path.join(KATALOG, 'picklebot')
 
 KOLOR = {'light': '#eeeed2', 'dark': '#769656'}
+KOLOR_ZAZNACZENIA = '#f0c040'
 TEXT_LIGHT = '#1c1c1c'
 TEXT_DARK = '#f8f8f8'
 TLO = '#101418'
@@ -60,6 +61,11 @@ class Aplikacja:
         self.q = queue.Queue()
         self.proc = None
         self.pola = [None] * 64
+        self.zaznaczone = None      # index of the selected square, or None
+        self.obecna_plansza = None  # last parsed @BOARD@ (64 chars)
+        self.player_white = None    # player's colour from @SIDE@
+        self.tura_biala = None      # whose turn, from @BOARD@
+        self.gra_aktywna = False
         self._styl()
         self._buduj_szachownice()
         self._buduj_panel()
@@ -89,6 +95,7 @@ class Aplikacja:
                          bg=KOLOR['dark'] if ciemne else KOLOR['light'],
                          fg=TEXT_DARK if ciemne else TEXT_LIGHT)
             e.grid(row=i // 8, column=i % 8)
+            e.bind('<Button-1>', lambda _e, i=i: self._klik(i))
             self.pola[i] = e
 
     def _buduj_panel(self):
@@ -115,6 +122,9 @@ class Aplikacja:
 
         self.verbose_ck = tk.Checkbutton(panel, bg=TLO, fg='#c8d6e0', selectcolor='#1c2229',
                                          variable=self.var_verbose)
+
+        self.etykieta_status = tk.Label(panel, text='', bg=TLO, fg='#ffd166',
+                                        font=('DejaVu Sans', 10, 'bold'))
 
         self.przycisk_start = tk.Button(panel, command=self._start_procesu, width=22)
         self.przycisk_jezyk = tk.Button(panel, command=self._przelacz_jezyk, width=22)
@@ -144,6 +154,8 @@ class Aplikacja:
         wiersz += 1
         self._etykieta_pola(panel, 'verbose', wiersz)
         self.verbose_ck.grid(row=wiersz, column=1, pady=2, sticky='w')
+        wiersz += 1
+        self.etykieta_status.grid(row=wiersz, column=0, columnspan=2, pady=(2, 6))
         wiersz += 1
         self.przycisk_start.grid(row=wiersz, column=0, columnspan=2, pady=3)
         wiersz += 1
@@ -183,6 +195,7 @@ class Aplikacja:
         self.przycisk_jezyk.configure(text=self._t('ENGLISH', 'POLSKI'))
         self.przycisk_zamknij.configure(text=self._t('WYJDŹ', 'QUIT'))
         self.przycisk_wyslij.configure(text=self._t('WYŚLIJ', 'SEND'))
+        self._ustaw_status()
 
     def _przelacz_jezyk(self):
         self.en = not self.en
@@ -219,6 +232,7 @@ class Aplikacja:
                                           'Could not start picklebot: ' + str(e)))
             return
         self._dopisz_log(self._t('Uruchomiono picklebota.', 'PickleBot started.'), 'info')
+        self.gra_aktywna = True
         self.konsola.configure(state='normal')
         self.konsola.delete('1.0', 'end')
         self.konsola.configure(state='disabled')
@@ -236,9 +250,13 @@ class Aplikacja:
     def _linia(self, surowa):
         w = surowa.rstrip('\r\n')
         if w.startswith('@BOARD@ '):
-            plansza = w[len('@BOARD@ '):]
-            if len(plansza) == 64:
-                self.q.put(('board', plansza))
+            reszta = w[len('@BOARD@ '):]
+            tura = reszta[0:1]
+            plansza = reszta[2:2 + 64]
+            if tura in ('W', 'B') and len(plansza) == 64:
+                self.q.put(('board', tura, plansza))
+        elif w.startswith('@SIDE@ '):
+            self.q.put(('side', w[len('@SIDE@ '):].strip()))
         else:
             tekst = ANSI.sub('', w).strip()
             if tekst:
@@ -248,6 +266,7 @@ class Aplikacja:
         komenda = self.pole_we.get().strip()
         if not komenda or not self.proc or self.proc.poll() is not None:
             return
+        self._dopisz_log('>> ' + komenda, 'info')
         try:
             self.proc.stdin.write((komenda + '\n').encode('utf-8'))
             self.proc.stdin.flush()
@@ -260,27 +279,110 @@ class Aplikacja:
         try:
             while True:
                 item = self.q.get_nowait()
-                typ, dane = item[0], item[1]
+                typ = item[0]
                 if typ == 'board':
-                    self._rysuj_plansze(dane)
+                    self.tura_biala = item[1] == 'W'
+                    self.zaznaczone = None
+                    self._rysuj_plansze(item[2])
+                    self._echo_plansza(item[2])
+                    self._ustaw_status()
+                elif typ == 'side':
+                    self.player_white = item[1] == 'W'
+                    self._ustaw_status()
                 elif typ == 'log':
-                    self._dopisz_log(dane)
+                    self._dopisz_log(item[1])
                 elif typ == 'eof':
+                    self.gra_aktywna = False
                     self._dopisz_log(self._t('Koniec strumienia - gra zakończona.',
                                              'Stream ended - the game is over.'), 'warn')
+                    self._ustaw_status()
         except queue.Empty:
             pass
         self.root.after(50, self._przetwarzaj_kolejke)
 
     def _rysuj_plansze(self, plansza):
+        self.obecna_plansza = plansza
         for i, znak in enumerate(plansza):
+            self.pola[i].configure(text=GLYPHY.get(znak, ''))
+        self._podswietl()
+
+    def _podswietl(self):
+        for i in range(64):
             ciemne = (i // 8 + i % 8) % 2 == 0
-            self.pola[i].configure(text=GLYPHY.get(znak, ''),
-                                   fg=TEXT_DARK if ciemne else TEXT_LIGHT)
+            bg = KOLOR['dark'] if ciemne else KOLOR['light']
+            fg = TEXT_DARK if ciemne else TEXT_LIGHT
+            if i == self.zaznaczone:
+                bg = KOLOR_ZAZNACZENIA
+                fg = '#1c1c1c'
+            self.pola[i].configure(bg=bg, fg=fg)
+
+    def _klik(self, indeks):
+        if not self.gra_aktywna or self.proc is None or self.proc.poll() is not None:
+            return
+        if self.player_white is None or self.tura_biala is None or self.obecna_plansza is None:
+            return
+        if self.tura_biala != self.player_white:
+            self._dopisz_log(self._t('Poczekaj na ruch bota...', 'Waiting for the bot...'), 'info')
+            return
+        if self.zaznaczone is None:
+            znak = self.obecna_plansza[indeks]
+            if znak == ' ':
+                self._dopisz_log(self._t('Wybierz własną figurę.', 'Pick one of your pieces.'),
+                                 'warn')
+                return
+            if znak.isupper() != self.player_white:
+                self._dopisz_log(self._t('To nie twoja figura.', 'That is not your piece.'),
+                                 'warn')
+                return
+            self.zaznaczone = indeks
+            self._podswietl()
+        else:
+            skad = self.zaznaczone
+            self.zaznaczone = None
+            self._podswietl()
+            if skad == indeks:
+                return
+            self.wyslij_ruch(skad, indeks)
+
+    def _nazwa_pola(self, indeks):
+        return 'abcdefgh'[indeks % 8] + str(8 - indeks // 8)
+
+    def wyslij_ruch(self, skad, dokad):
+        if not self.proc or self.proc.poll() is not None:
+            return
+        m = self._nazwa_pola(skad) + ' ' + self._nazwa_pola(dokad)
+        self._dopisz_log('>> ' + m, 'info')
+        try:
+            self.proc.stdin.write((m + '\n').encode('utf-8'))
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def _ustaw_status(self):
+        if not hasattr(self, 'etykieta_status'):
+            return
+        if not self.gra_aktywna:
+            txt = self._t('Naciśnij START.', 'Press START.')
+        elif self.player_white is None or self.tura_biala is None:
+            txt = self._t('Uruchamianie...', 'Starting...')
+        elif self.tura_biala == self.player_white:
+            txt = self._t('Twoja kolej - kliknij figurę.', 'Your turn - click a piece.')
+        else:
+            txt = self._t('Bot myśli...', 'Bot is thinking...')
+        self.etykieta_status.configure(text=txt)
+
+    def _echo(self, tekst):
+        print(tekst, flush=True)
+
+    def _echo_plansza(self, plansza):
+        for r in range(8):
+            self._echo(' '.join(plansza[r * 8:(r + 1) * 8]))
+        self._echo('')
 
     def _dopisz_log(self, tekst, poz=None):
         if poz is None:
             poz = poziom_logu(tekst)
+        self._echo(tekst)
         self.konsola.configure(state='normal')
         self.konsola.insert('end', tekst + '\n', poz)
         self.konsola.see('end')

@@ -100,7 +100,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 python3 picklebot_gui.py
 ```
 
-Panel pozwala wybrać tryb bota, twoją stronę, limit czasu i tryb verbose, a potem pokazuje szachownicę, dziennik gry i pole na ruchy. Uruchom z `--en`, aby zacząć po angielsku.
+Panel pozwala wybrać tryb bota, twoją stronę, limit czasu i tryb verbose, a potem pokazuje szachownicę, czyją jest tura, dziennik gry i pole na ruchy. Figurami ruszasz **klikając** je (wybierz figurę, potem kliknij pole docelowe) albo wpisując ruch do pola. Wszystko, co mówi silnik — i każda szachownica — jest też wypisywane do terminala. Uruchom z `--en`, aby zacząć po angielsku.
 
 ## TODO
 
