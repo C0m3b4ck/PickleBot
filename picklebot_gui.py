@@ -51,6 +51,57 @@ TRYBY = [
      'pl_opis': 'Najpierw broni własnego króla.', 'en_opis': 'Defends its own king above all.'},
 ]
 
+# sides: code sent to the engine and the display name
+STRONY = [
+    {'kod': 'W', 'pl': 'Białe', 'en': 'White'},
+    {'kod': 'B', 'pl': 'Czarne', 'en': 'Black'},
+    {'kod': 'R', 'pl': 'Losowo', 'en': 'Random'},
+]
+
+# help texts for the "?" buttons, (Polish, English)
+POMOC = {
+    'tryb': (
+        'Osobowość bota:\n'
+        '• Agresywny — poluje na materiał wroga.\n'
+        '• Ofensywny — atakuje króla przeciwnika.\n'
+        '• Defensywny — broni własnego materiału.\n'
+        '• Ochronny — przede wszystkim chroni króla.',
+        "The bot's personality:\n"
+        '• Aggressive — hunts enemy material.\n'
+        '• Offensive — attacks the enemy king.\n'
+        '• Defensive — keeps its own material safe.\n'
+        '• Guarding — protects its king above all.'),
+    'strona': (
+        'Twój kolor:\n'
+        '• Białe — ruszasz się pierwszy.\n'
+        '• Czarne — ruszasz się drugi.\n'
+        '• Losowo — PickleBot wybiera za ciebie.',
+        'Your colour:\n'
+        '• White — you move first.\n'
+        '• Black — you move second.\n'
+        '• Random — PickleBot picks for you.'),
+    'czas': (
+        'Limit czasu w sekundach na stronę.\n'
+        'Przy 0 (brak) bot szuka do stałej głębokości. '
+        'Z limitem myśli tak długo, jak pozwala zegar.',
+        'Time limit in seconds per side.\n'
+        'With 0 (none) the bot searches to a fixed depth. '
+        'With a limit it thinks as long as the clock allows.'),
+    'verbose': (
+        'Pokazuje myślenie bota — oceny pozycji i najlepszy wariant — '
+        'w dzienniku gry podczas szukania.',
+        "Prints the bot's thinking — evaluation scores and the best line — "
+        'in the game log as it searches.'),
+    'ruch': (
+        'Wpisz ruch np. "e2 e4" (pola, oddzielone spacją) i naciśnij Enter, '
+        'albo kliknij swoją figurę, a potem pole docelowe.\n'
+        'W trakcie gry możesz wpisać "language pl" / "jezyk en", '
+        'aby przełączyć język.',
+        'Type a move like "e2 e4" (two squares, space-separated) and press '
+        'Enter, or click your piece and then its destination.\n'
+        'Mid-game you can type "language pl" / "jezyk en" to switch language.'),
+}
+
 
 def poziom_logu(tekst):
     if '[ OK ]' in tekst:
@@ -115,6 +166,40 @@ class Aplikacja:
     def _odswiez_opis_trybu(self):
         self.etykieta_opis_trybu.configure(text=self._opis_trybu(self.nr_trybu))
 
+    def _nazwa_strony(self, kod):
+        for s in STRONY:
+            if s['kod'] == kod:
+                return s['en'] if self.en else s['pl']
+        return kod
+
+    def _kod_strony(self):
+        for s in STRONY:
+            if self._nazwa_strony(s['kod']) == self.var_strona.get():
+                return s['kod']
+        return 'W'
+
+    def _wybrano_strone(self):
+        self.kod_strony = self._kod_strony()
+
+    def _odswiez_strony(self):
+        nazwy = [self._nazwa_strony(s['kod']) for s in STRONY]
+        self.strony['values'] = nazwy
+        self.var_strona.set(self._nazwa_strony(self.kod_strony))
+
+    def _pomoc_tekst(self, klucz):
+        pl, en = POMOC[klucz]
+        return en if self.en else pl
+
+    def _pokaz_pomoc(self, klucz):
+        messagebox.showinfo('?', self._pomoc_tekst(klucz))
+
+    def _przycisk_pomocy(self, panel, klucz, wiersz):
+        b = tk.Button(panel, text='?', width=2, relief='flat', cursor='hand2',
+                      bg='#1c2229', fg='#4dd2ff', activebackground='#2a333c',
+                      command=lambda k=klucz: self._pokaz_pomoc(k))
+        b.grid(row=wiersz, column=2, pady=2, sticky='w')
+        return b
+
     def _styl(self):
         self.s = ttk.Style(self.root)
         try:
@@ -142,7 +227,7 @@ class Aplikacja:
         panel.pack(side='left', fill='y', padx=(0, 12), pady=12)
 
         self.var_tryb = tk.StringVar()
-        self.var_strona = tk.StringVar(value='W')
+        self.var_strona = tk.StringVar()
         self.var_czas = tk.StringVar(value='0')
         self.var_verbose = tk.BooleanVar(value=False)
 
@@ -155,9 +240,9 @@ class Aplikacja:
         self.etykieta_opis_trybu = tk.Label(panel, text='', bg=TLO, fg='#9fb0bd',
                                             wraplength=230, justify='left')
 
-        strony = ttk.Combobox(panel, textvariable=self.var_strona, state='readonly', width=22)
-        strony['values'] = ['W', 'B', 'R']
-        strony.current(0)
+        self.strony = ttk.Combobox(panel, textvariable=self.var_strona, state='readonly', width=22)
+        self.strony.bind('<<ComboboxSelected>>', lambda _e: self._wybrano_strone())
+        self.kod_strony = 'W'
 
         czas = tk.Spinbox(panel, from_=0, to=600, textvariable=self.var_czas, width=22)
 
@@ -186,17 +271,21 @@ class Aplikacja:
         wiersz += 1
         self._etykieta_pola(panel, 'tryb', wiersz)
         self.tryby.grid(row=wiersz, column=1, pady=2, sticky='w')
+        self._przycisk_pomocy(panel, 'tryb', wiersz)
         wiersz += 1
         self.etykieta_opis_trybu.grid(row=wiersz, column=0, columnspan=2, pady=(0, 4), sticky='w')
         wiersz += 1
         self._etykieta_pola(panel, 'strona', wiersz)
-        strony.grid(row=wiersz, column=1, pady=2, sticky='w')
+        self.strony.grid(row=wiersz, column=1, pady=2, sticky='w')
+        self._przycisk_pomocy(panel, 'strona', wiersz)
         wiersz += 1
         self._etykieta_pola(panel, 'czas', wiersz)
         czas.grid(row=wiersz, column=1, pady=2, sticky='w')
+        self._przycisk_pomocy(panel, 'czas', wiersz)
         wiersz += 1
         self._etykieta_pola(panel, 'verbose', wiersz)
         self.verbose_ck.grid(row=wiersz, column=1, pady=2, sticky='w')
+        self._przycisk_pomocy(panel, 'verbose', wiersz)
         wiersz += 1
         self.etykieta_status.grid(row=wiersz, column=0, columnspan=2, pady=(2, 6))
         wiersz += 1
@@ -208,6 +297,7 @@ class Aplikacja:
         wiersz += 1
         self._etykieta_pola(panel, 'ruch', wiersz)
         self.pole_we.grid(row=wiersz, column=1, pady=(8, 2), sticky='w')
+        self._przycisk_pomocy(panel, 'ruch', wiersz)
         wiersz += 1
         self.przycisk_wyslij.grid(row=wiersz, column=0, columnspan=2, pady=(0, 8))
         wiersz += 1
@@ -240,6 +330,7 @@ class Aplikacja:
         self.przycisk_wyslij.configure(text=self._t('WYŚLIJ', 'SEND'))
         self._ustaw_status()
         self._odswiez_tryby()
+        self._odswiez_strony()
 
     def _przelacz_jezyk(self):
         self.en = not self.en
@@ -261,7 +352,7 @@ class Aplikacja:
             print('BLAD: ' + komunikat, file=sys.stderr)
             messagebox.showerror(self._t('Brak picklebota', 'PickleBot missing'), komunikat)
             return
-        args = [BINAR, '--mode', str(self._numer_trybu()), '--side', self.var_strona.get(),
+        args = [BINAR, '--mode', str(self._numer_trybu()), '--side', self.kod_strony,
                 '--time', self.var_czas.get()]
         args.append('--verbose' if self.var_verbose.get() else '--noverbose')
         if self.en:

@@ -100,7 +100,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 python3 picklebot_gui.py
 ```
 
-The panel lets you pick the bot mode (by name — Aggressive, Offensive, Defensive, Guarding — with a short description underneath), your side, the time limit and verbose mode, then shows the board, whose turn it is, the game log and a move entry. Move pieces by **clicking** them (select a piece, then click its destination) or by typing into the move entry. Everything the engine says — and every board — is also echoed to the terminal. It starts in English; pass `--pl` to begin in Polish.
+The panel lets you pick the bot mode (by name — Aggressive, Offensive, Defensive, Guarding — with a short description underneath), your side (**White**/**Black**/**Random**, not just W/B/R), the time limit and verbose mode. Every option has a **"?"** button that explains what it does. It then shows the board, whose turn it is, the game log and a move entry. Move pieces by **clicking** them (select a piece, then click its destination) or by typing into the move entry. Everything the engine says — and every board — is also echoed to the terminal. It starts in English; pass `--pl` to begin in Polish.
 
 ## TODO
 
