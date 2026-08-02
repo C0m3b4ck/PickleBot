@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/sb3x/Code/PickleBot/wxGUI/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

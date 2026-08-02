@@ -1,0 +1,1 @@
+cl.exe picklebot_winapi.cpp /Fe:picklebot_winapi.exe /EHsc /MD /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comctl32.lib

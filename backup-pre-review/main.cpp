@@ -2,99 +2,45 @@
 #include <iostream> //for in/out
 #include <vector> //for storing values
 #include <utility> //for std::pair
+#include <thread> //for parallel move calculation
+#include <functional> //for std::function
+#include <mutex> //for the eval pool
+#include <condition_variable> //for the eval pool
+#include <atomic> //for the eval pool
 #include <cctype> //for toupper
 #include <chrono> //for time limits
 #include <algorithm> //for move ordering
 #include <random> //for random side selection
-#include <limits> //for input validation
-
-// ---=== BOARD ===---
-// a position: piece placement, en passant target, castling rights
-struct Board
-{
-    std::vector<char> sq;
-    short ep = -1; //square a pawn can be captured en passant on, -1 if none
-    bool wks = true; //white kingside castling available
-    bool wqs = true; //white queenside castling available
-    bool bks = true; //black kingside castling available
-    bool bqs = true; //black queenside castling available
-};
-
-// ---=== CONSTANTS ===---
-// home-rank squares (a8=0 ... h1=63)
-const short A1 = 56, B1 = 57, C1 = 58, D1 = 59, E1 = 60, F1 = 61, G1 = 62, H1 = 63;
-const short A8 = 0, B8 = 1, C8 = 2, D8 = 3, E8 = 4, F8 = 5, G8 = 6, H8 = 7;
-
-// evaluation weights shared by scoring and search
-const long PIECE_SCALE = 10; //material value multiplier
-const long PROXIMITY_CONST = 14; //max proximity bonus
 
 // ---=== GLOBAL VARIABLES ===---
-Board game = {
-    {
-        'r','n','b','q','k','b','n','r',
-        'p','p','p','p','p','p','p','p',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
-        'P','P','P','P','P','P','P','P',
-        'R','N','B','Q','K','B','N','R'
-    },
-    -1, true, true, true, true
-};
 bool isVictory = false;
 bool input_ended = false; //set when the player's input stream closes
 bool playerWhite;  //true for white, false for black
 short time_limit = 0;
 short bot_mode = 0; //aggressigve, offensive, defensive, guarding
 bool verbose_mode = false; //true to show the bot's thinking
+short en_passant_target = -1; //square a pawn can be captured en passant on, -1 if none
+bool white_castle_ks = true; //white kingside castling available
+bool white_castle_qs = true; //white queenside castling available
+bool black_castle_ks = true; //black kingside castling available
+bool black_castle_qs = true; //black queenside castling available
 long player_time_used_ms = 0; //human side clock
 long bot_time_used_ms = 0; //bot side clock
+std::vector<char> board_characters = {
+    'r','n','b','q','k','b','n','r',
+    'p','p','p','p','p','p','p','p',
+    ' ',' ',' ',' ',' ',' ',' ',' ',
+    ' ',' ',' ',' ',' ',' ',' ',' ',
+    ' ',' ',' ',' ',' ',' ',' ',' ',
+    ' ',' ',' ',' ',' ',' ',' ',' ',
+    'P','P','P','P','P','P','P','P',
+    'R','N','B','Q','K','B','N','R'
+};
 
 // ---=== PRE-DEFINITIONS ===---
 void get_side_random();
 void player_move();
-bool square_attacked(const Board& b, short sq, bool by_white);
-
-// ---=== INPUT HELPERS ===---
-// reads an integer, recovering from garbage input; returns false on EOF
-bool read_int(short& value)
-{
-    if (!(std::cin >> value))
-    {
-        if (std::cin.eof()) { input_ended = true; return false; }
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return false;
-    }
-    return true;
-}
-// read a number in [lo, hi], retrying on bad input; EOF returns lo
-short prompt_number(short lo, short hi)
-{
-    short v;
-    while (true)
-    {
-        if (!read_int(v))
-        {
-            if (input_ended) return lo;
-            std::cout << "!!! Invalid choice - please reselect !!! \n";
-            continue;
-        }
-        if (v >= lo && v <= hi) return v;
-        std::cout << "!!! Invalid choice - please reselect !!! \n";
-    }
-}
-// parse an algebraic square like "e4" into a board index; false on bad input
-bool parse_square(const std::string& s, short& sq)
-{
-    if (s.size() != 2) return false;
-    char f = s[0], r = s[1];
-    if (f < 'a' || f > 'h' || r < '1' || r > '8') return false;
-    sq = (8 - (r - '0')) * 8 + (f - 'a');
-    return true;
-}
+bool square_attacked(const std::vector<char>& b, short sq, bool by_white);
 
 // ---=== USER INTERACTION ===---
 void greet()
@@ -115,32 +61,60 @@ void get_settings()
     std::cout << "[3] Defensive (material) \n";
     std::cout << "[4] Guarding (defensive focus on king) \n";
     std::cout << "Your choice: ";
-    bot_mode = prompt_number(1, 4);
-    if (input_ended) return;
+    while (bot_mode != 1 && bot_mode != 2 && bot_mode != 3 && bot_mode != 4)
+    {
+        std::cin >> bot_mode;
+        if (bot_mode != 1 && bot_mode != 2 && bot_mode != 3 && bot_mode != 4)
+        {
+            std::cout << "!!! Invalid choice - please reselect !!! \n";
+        }
+    }
     // get starting side
     std::cout << "Input player (your) side: \n";
     std::cout << "[1] White \n";
     std::cout << "[2] Black \n";
     std::cout << "[3] Random \n";
     std::cout << "Your choice: ";
-    short choice = prompt_number(1, 3);
-    if (input_ended) return;
-    switch (choice)
+    short choice = 0;
+    while (choice != 1 && choice != 2 && choice != 3)
     {
-        case 1: playerWhite = true; break;
-        case 2: playerWhite = false; break;
-        case 3: get_side_random(); break;
+        std::cin >> choice;
+        if (choice != 1 && choice != 2 && choice != 3)
+        {
+            std::cout << "!!! Invalid choice - please reselect !!! \n";
+        }
+        else
+        {
+            switch(choice)
+            {
+                case(1):
+                    playerWhite = true;
+                    break;
+                case(2):
+                    playerWhite = false;
+                    break;
+                case(3):
+                    get_side_random();
+            }
+        }
     }
     // time limit value
     std::cout << "Input time limit in seconds per side (0 for none): ";
-    if (!read_int(time_limit)) time_limit = 0;
-    if (time_limit < 0) time_limit = 0;
+    std::cin >> time_limit;
     // verbose mode
     std::cout << "Enable verbose mode (show bot thinking)? \n";
     std::cout << "[1] Yes \n";
     std::cout << "[2] No \n";
     std::cout << "Your choice: ";
-    short verb = prompt_number(1, 2);
+    short verb = 0;
+    while (verb != 1 && verb != 2)
+    {
+        std::cin >> verb;
+        if (verb != 1 && verb != 2)
+        {
+            std::cout << "!!! Invalid choice - please reselect !!! \n";
+        }
+    }
     verbose_mode = (verb == 1);
 }
 void print_board()
@@ -149,7 +123,7 @@ void print_board()
     {
         for (short j = 0; j < 8; j++)
         {
-            std::cout << game.sq[i * 8 + j] << " ";
+            std::cout << board_characters[i * 8 + j] << " ";
         }
         std::cout << "\n";
     }
@@ -170,11 +144,12 @@ bool is_enemy_piece(char c, bool white)
     return is_white_piece(c) != white;
 }
 
-bool legal_move(const Board& b, short from, short to, bool white)
+bool legal_move(const std::vector<char>& b, short from, short to, bool white, short ep,
+                bool wks, bool wqs, bool bks, bool bqs)
 {
-    char piece = b.sq[from];
+    char piece = b[from];
     if (piece == ' ') return false;
-    if (is_player_piece(b.sq[to], white)) return false;
+    if (is_player_piece(b[to], white)) return false;
 
     short fr = from / 8, fc = from % 8;
     short tr = to / 8, tc = to % 8;
@@ -192,18 +167,18 @@ bool legal_move(const Board& b, short from, short to, bool white)
             short startrow = white ? 6 : 1;
             if (dc == 0) // forward
             {
-                if (dr == step && b.sq[to] == ' ') return true;
-                if (fr == startrow && dr == 2 * step && b.sq[to] == ' '
-                    && b.sq[from + step * 8] == ' ') return true;
+                if (dr == step && b[to] == ' ') return true;
+                if (fr == startrow && dr == 2 * step && b[to] == ' '
+                    && b[from + step * 8] == ' ') return true;
                 return false;
             }
             else // capture
             {
                 if (adr == 1 && adc == 1 && dr == step)
                 {
-                    if (is_enemy_piece(b.sq[to], white)) return true;
+                    if (is_enemy_piece(b[to], white)) return true;
                     // en passant capture onto the target square
-                    if (to == b.ep && is_enemy_piece(b.sq[fr * 8 + tc], white)) return true;
+                    if (to == ep && is_enemy_piece(b[fr * 8 + tc], white)) return true;
                 }
                 return false;
             }
@@ -220,38 +195,38 @@ bool legal_move(const Board& b, short from, short to, bool white)
         case 'K':
             if (adr <= 1 && adc <= 1 && (adr + adc > 0)) return true;
             // castling: king slides two squares towards its own rook
-            // white king on e1, black king on e8
+            // white king on e1 (60), black king on e8 (4)
             if (white)
             {
-                if (from == E1 && to == G1 && b.wks) // e1-g1
+                if (from == 60 && to == 62 && wks) // e1-g1
                 {
-                    if (b.sq[F1] != ' ' || b.sq[G1] != ' ') return false;
-                    if (square_attacked(b, E1, false) || square_attacked(b, F1, false)
-                        || square_attacked(b, G1, false)) return false;
+                    if (b[61] != ' ' || b[62] != ' ') return false;
+                    if (square_attacked(b, 60, false) || square_attacked(b, 61, false)
+                        || square_attacked(b, 62, false)) return false;
                     return true;
                 }
-                if (from == E1 && to == C1 && b.wqs) // e1-c1
+                if (from == 60 && to == 58 && wqs) // e1-c1
                 {
-                    if (b.sq[D1] != ' ' || b.sq[C1] != ' ' || b.sq[B1] != ' ') return false;
-                    if (square_attacked(b, E1, false) || square_attacked(b, D1, false)
-                        || square_attacked(b, C1, false)) return false;
+                    if (b[57] != ' ' || b[58] != ' ' || b[59] != ' ') return false;
+                    if (square_attacked(b, 60, false) || square_attacked(b, 59, false)
+                        || square_attacked(b, 58, false)) return false;
                     return true;
                 }
             }
             else
             {
-                if (from == E8 && to == G8 && b.bks) // e8-g8
+                if (from == 4 && to == 6 && bks) // e8-g8
                 {
-                    if (b.sq[F8] != ' ' || b.sq[G8] != ' ') return false;
-                    if (square_attacked(b, E8, true) || square_attacked(b, F8, true)
-                        || square_attacked(b, G8, true)) return false;
+                    if (b[5] != ' ' || b[6] != ' ') return false;
+                    if (square_attacked(b, 4, true) || square_attacked(b, 5, true)
+                        || square_attacked(b, 6, true)) return false;
                     return true;
                 }
-                if (from == E8 && to == C8 && b.bqs) // e8-c8
+                if (from == 4 && to == 2 && bqs) // e8-c8
                 {
-                    if (b.sq[D8] != ' ' || b.sq[C8] != ' ' || b.sq[B8] != ' ') return false;
-                    if (square_attacked(b, E8, true) || square_attacked(b, D8, true)
-                        || square_attacked(b, C8, true)) return false;
+                    if (b[1] != ' ' || b[2] != ' ' || b[3] != ' ') return false;
+                    if (square_attacked(b, 4, true) || square_attacked(b, 3, true)
+                        || square_attacked(b, 2, true)) return false;
                     return true;
                 }
             }
@@ -266,80 +241,101 @@ bool legal_move(const Board& b, short from, short to, bool white)
     short r = fr + sdr, c = fc + sdc;
     while (r != tr || c != tc)
     {
-        if (b.sq[r * 8 + c] != ' ') return false;
+        if (b[r * 8 + c] != ' ') return false;
         r += sdr;
         c += sdc;
     }
     return true;
 }
 
-// applies a move to a board and updates en passant target and castling rights
-void make_move(Board& b, short from, short to, bool white)
+// convenience wrapper using the current global game state
+bool legal_move(const std::vector<char>& b, short from, short to, bool white)
 {
-    char moving = b.sq[from];
-    bool ep_capture = (to == b.ep) && toupper(moving) == 'P' && from % 8 != to % 8;
-    short cap_sq = ep_capture ? from / 8 * 8 + to % 8 : to;
-    char captured = b.sq[cap_sq];
+    return legal_move(b, from, to, white, en_passant_target,
+                      white_castle_ks, white_castle_qs, black_castle_ks, black_castle_qs);
+}
 
-    // castling: the rook jumps across the king (e-file to g/c file)
+// a position as the search understands it: board + en passant + castling rights
+struct Board
+{
+    std::vector<char> sq;
+    short ep = -1;
+    bool wks = true, wqs = true, bks = true, bqs = true;
+};
+
+// applies a move to a board and updates en passant target and castling rights
+void make_move(std::vector<char>& b, short from, short to, bool white, short& ep,
+               bool& wks, bool& wqs, bool& bks, bool& bqs)
+{
+    char moving = b[from];
+    bool ep_capture = (to == ep) && toupper(moving) == 'P' && from % 8 != to % 8;
+    short cap_sq = ep_capture ? from / 8 * 8 + to % 8 : to;
+    char captured = b[cap_sq];
+
+    // castling: the rook jumps across the king (e1/e8 to g/c file)
     if (toupper(moving) == 'K' && (to - from == 2 || to - from == -2))
     {
         short row = from / 8;
         if (to - from == 2) // kingside: rook from h-file to f-file
         {
-            b.sq[from + 1] = b.sq[row * 8 + 7];
-            b.sq[row * 8 + 7] = ' ';
+            b[from + 1] = b[row * 8 + 7];
+            b[row * 8 + 7] = ' ';
         }
         else // queenside: rook from a-file to d-file
         {
-            b.sq[from - 1] = b.sq[row * 8];
-            b.sq[row * 8] = ' ';
+            b[from - 1] = b[row * 8];
+            b[row * 8] = ' ';
         }
     }
 
-    b.sq[to] = moving;
-    b.sq[from] = ' ';
-    if (ep_capture) b.sq[cap_sq] = ' ';
+    b[to] = moving;
+    b[from] = ' ';
+    if (ep_capture) b[cap_sq] = ' ';
 
     // update castling rights
     if (toupper(moving) == 'K')
     {
-        if (white) { b.wks = false; b.wqs = false; }
-        else { b.bks = false; b.bqs = false; }
+        if (white) { wks = false; wqs = false; }
+        else { bks = false; bqs = false; }
     }
     else if (moving == 'R' || moving == 'r')
     {
-        if (from == H1) b.wks = false;
-        if (from == A1) b.wqs = false;
-        if (from == H8) b.bks = false;
-        if (from == A8) b.bqs = false;
+        if (from == 63) wks = false;
+        if (from == 56) wqs = false;
+        if (from == 7) bks = false;
+        if (from == 0) bqs = false;
     }
     if (ep_capture)
     {
-        if (cap_sq == H1) b.wks = false;
-        if (cap_sq == A1) b.wqs = false;
-        if (cap_sq == H8) b.bks = false;
-        if (cap_sq == A8) b.bqs = false;
+        if (cap_sq == 63) wks = false;
+        if (cap_sq == 56) wqs = false;
+        if (cap_sq == 7) bks = false;
+        if (cap_sq == 0) bqs = false;
     }
     else if (captured == 'R')
     {
-        if (to == H1) b.wks = false;
-        if (to == A1) b.wqs = false;
+        if (to == 63) wks = false;
+        if (to == 56) wqs = false;
     }
     else if (captured == 'r')
     {
-        if (to == H8) b.bks = false;
-        if (to == A8) b.bqs = false;
+        if (to == 7) bks = false;
+        if (to == 0) bqs = false;
     }
 
     // update en passant target after a two-square pawn push
-    b.ep = -1;
+    ep = -1;
     if (toupper(moving) == 'P' && (to / 8 - from / 8 == 2 || to / 8 - from / 8 == -2))
-        b.ep = (from / 8 + to / 8) / 2 * 8 + to % 8;
+        ep = (from / 8 + to / 8) / 2 * 8 + to % 8;
+}
+
+void make_move(Board& st, short from, short to, bool white)
+{
+    make_move(st.sq, from, to, white, st.ep, st.wks, st.wqs, st.bks, st.bqs);
 }
 
 // is square `sq` attacked by a piece of color `by_white`?
-bool square_attacked(const Board& b, short sq, bool by_white)
+bool square_attacked(const std::vector<char>& b, short sq, bool by_white)
 {
     short r = sq / 8, c = sq % 8;
 
@@ -349,8 +345,8 @@ bool square_attacked(const Board& b, short sq, bool by_white)
     short pr = r + dir;
     if (pr >= 0 && pr < 8)
     {
-        if (c - 1 >= 0 && b.sq[pr * 8 + (c - 1)] == pawn) return true;
-        if (c + 1 < 8 && b.sq[pr * 8 + (c + 1)] == pawn) return true;
+        if (c - 1 >= 0 && b[pr * 8 + (c - 1)] == pawn) return true;
+        if (c + 1 < 8 && b[pr * 8 + (c + 1)] == pawn) return true;
     }
 
     // knights
@@ -360,7 +356,7 @@ bool square_attacked(const Board& b, short sq, bool by_white)
     for (short i = 0; i < 8; i++)
     {
         short nr = r + knight_dr[i], nc = c + knight_dc[i];
-        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && b.sq[nr * 8 + nc] == knight) return true;
+        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && b[nr * 8 + nc] == knight) return true;
     }
 
     // adjacent king
@@ -370,7 +366,7 @@ bool square_attacked(const Board& b, short sq, bool by_white)
         {
             if (dr == 0 && dc == 0) continue;
             short nr = r + dr, nc = c + dc;
-            if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && b.sq[nr * 8 + nc] == king) return true;
+            if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && b[nr * 8 + nc] == king) return true;
         }
 
     // sliding rays: 0=N 1=S 2=W 3=E 4=NW 5=NE 6=SW 7=SE
@@ -381,7 +377,7 @@ bool square_attacked(const Board& b, short sq, bool by_white)
         short nr = r + ray_dr[d], nc = c + ray_dc[d];
         while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8)
         {
-            char p = b.sq[nr * 8 + nc];
+            char p = b[nr * 8 + nc];
             if (p != ' ')
             {
                 if (is_white_piece(p) == by_white)
@@ -405,25 +401,14 @@ bool square_attacked(const Board& b, short sq, bool by_white)
     return false;
 }
 
-bool king_in_check(const Board& b, bool white)
+bool king_in_check(const std::vector<char>& b, bool white)
 {
     char king = white ? 'K' : 'k';
     for (short i = 0; i < 64; i++)
     {
-        if (b.sq[i] == king) return square_attacked(b, i, !white);
+        if (b[i] == king) return square_attacked(b, i, !white);
     }
     return true; // no king found - treat as check
-}
-
-// applies from->to to a copy of `b`; returns true if the move is legal
-// (movement rules hold and the mover's king is not left in check).
-// The result is left in `out`.
-bool try_move(const Board& b, short from, short to, bool white, Board& out)
-{
-    if (!legal_move(b, from, to, white)) return false;
-    out = b;
-    make_move(out, from, to, white);
-    return !king_in_check(out, white);
 }
 
 void player_move()
@@ -439,33 +424,52 @@ void player_move()
             return;
         }
 
-        short from_num, to_num;
-        if (!parse_square(from, from_num) || !parse_square(to, to_num))
-        {
-            std::cout << "!!! Invalid move - bad square name !!! \n";
-            continue;
-        }
+        short from_num = (8 - (from[1] - '0')) * 8 + (from[0] - 'a');
+        short to_num = (8 - (to[1] - '0')) * 8 + (to[0] - 'a');
 
         // check 1: piece ownership
-        if (!is_player_piece(game.sq[from_num], playerWhite))
+        if (!is_player_piece(board_characters[from_num], playerWhite))
         {
             std::cout << "!!! Invalid move - not your piece !!! \n";
             continue;
         }
         // check 2: legal movement / path not obstructed
-        if (!legal_move(game, from_num, to_num, playerWhite))
+        if (!legal_move(board_characters, from_num, to_num, playerWhite))
         {
             std::cout << "!!! Invalid move - piece cannot move there !!! \n";
             continue;
         }
-        // check 3: king not left in check
-        Board out;
-        if (!try_move(game, from_num, to_num, playerWhite, out))
+        // detect en passant capture
+        bool en_passant_capture = false;
+        short cap_square = -1;
+        char saved_target = board_characters[to_num];
+        char saved_cap = ' ';
+        if (to_num == en_passant_target && toupper(board_characters[from_num]) == 'P'
+            && from_num % 8 != to_num % 8)
         {
+            en_passant_capture = true;
+            cap_square = from_num / 8 * 8 + to_num % 8;
+            saved_cap = board_characters[cap_square];
+        }
+
+        // check 3: king not left in check (simulation)
+        board_characters[to_num] = board_characters[from_num];
+        board_characters[from_num] = ' ';
+        if (en_passant_capture) board_characters[cap_square] = ' ';
+        if (king_in_check(board_characters, playerWhite))
+        {
+            board_characters[from_num] = board_characters[to_num];
+            board_characters[to_num] = saved_target;
+            if (en_passant_capture) board_characters[cap_square] = saved_cap;
             std::cout << "!!! Invalid move - king would be in check !!! \n";
             continue;
         }
-        game = out;
+        // undo the simulation, then apply the move for real
+        board_characters[from_num] = board_characters[to_num];
+        board_characters[to_num] = saved_target;
+        if (en_passant_capture) board_characters[cap_square] = saved_cap;
+        make_move(board_characters, from_num, to_num, playerWhite, en_passant_target,
+                  white_castle_ks, white_castle_qs, black_castle_ks, black_castle_qs);
 
         // track the player's clock
         if (time_limit > 0)
@@ -493,6 +497,131 @@ short piece_value(char c)
         case 'K': return 100;
         default: return 0;
     }
+}
+
+// persistent worker pool: keeps threads alive across moves (no per-call spawn cost)
+class EvalPool
+{
+    size_t n;
+    std::vector<std::thread> threads;
+    std::vector<std::vector<char>> boards; // one private board per worker
+    bool stop = false;
+    unsigned round = 0;
+    size_t begin_, end_;
+    std::function<void(size_t, std::vector<char>&)> task_;
+    std::atomic<size_t> next_{0};
+    std::atomic<size_t> remaining_{0};
+    std::mutex mtx_;
+    std::condition_variable cv_go_, cv_done_;
+
+    void worker(size_t t)
+    {
+        boards[t] = board_characters;
+        unsigned my_round = 0;
+        while (true)
+        {
+            {
+                std::unique_lock<std::mutex> lk(mtx_);
+                cv_go_.wait(lk, [&] { return stop || my_round < round; });
+                if (stop) return;
+                my_round = round;
+            }
+            boards[t] = board_characters; // fresh copy of the global board
+            // claim tasks in batches to avoid atomic-counter contention
+            static const size_t BATCH = 64;
+            for (;;)
+            {
+                size_t start = next_.fetch_add(BATCH);
+                if (start >= end_) break;
+                size_t stop = std::min(start + BATCH, end_);
+                for (size_t i = start; i < stop; i++) task_(i, boards[t]);
+            }
+            if (remaining_.fetch_sub(1) == 1) cv_done_.notify_all();
+        }
+    }
+
+public:
+    explicit EvalPool(size_t nthreads) : n(nthreads), boards(nthreads)
+    {
+        for (size_t t = 0; t < n; t++) threads.emplace_back([this, t] { worker(t); });
+    }
+    ~EvalPool()
+    {
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            stop = true;
+        }
+        round++;
+        cv_go_.notify_all();
+        for (auto& t : threads) t.join();
+    }
+    // run task(i, workerBoard) for every i in [begin, end), blocks until finished
+    void run(size_t begin, size_t end, std::function<void(size_t, std::vector<char>&)> task)
+    {
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            begin_ = begin;
+            end_ = end;
+            task_ = std::move(task);
+            round++;
+        }
+        next_.store(begin);
+        remaining_.store(n);
+        cv_go_.notify_all();
+        std::unique_lock<std::mutex> lk(mtx_);
+        cv_done_.wait(lk, [&] { return remaining_ == 0; });
+    }
+};
+
+EvalPool& eval_pool()
+{
+    unsigned hw = std::thread::hardware_concurrency();
+    static EvalPool pool(hw ? hw : 1);
+    return pool;
+}
+
+// only engage parallel scoring when the workload is large enough to beat thread latency
+const size_t PARALLEL_SCORE_THRESHOLD = 512;
+
+std::vector<std::pair<short, short>> generate_legal_moves(const std::vector<char>& b, bool white,
+    short ep, bool wks, bool wqs, bool bks, bool bqs)
+{
+    std::vector<std::pair<short, short>> moves;
+    for (short from = 0; from < 64; from++)
+    {
+        if (!is_player_piece(b[from], white)) continue;
+        for (short to = 0; to < 64; to++)
+        {
+            if (from == to) continue;
+            if (!legal_move(b, from, to, white, ep, wks, wqs, bks, bqs)) continue;
+            // reject moves that leave own king in check
+            std::vector<char> work = b;
+            bool ep_capture = (to == ep) && toupper(work[from]) == 'P' && from % 8 != to % 8;
+            short cap_sq = ep_capture ? from / 8 * 8 + to % 8 : to;
+            bool castle = toupper(work[from]) == 'K' && (to - from == 2 || to - from == -2);
+            short rook_from = 0, rook_to = 0;
+            if (castle)
+            {
+                short row = from / 8;
+                rook_from = (to - from == 2) ? row * 8 + 7 : row * 8;
+                rook_to = (to - from == 2) ? from + 1 : from - 1;
+                char r = work[rook_from];
+                work[rook_from] = ' ';
+                work[rook_to] = r;
+            }
+            work[to] = work[from];
+            work[from] = ' ';
+            if (ep_capture) work[cap_sq] = ' ';
+            if (!king_in_check(work, white)) moves.push_back({from, to});
+        }
+    }
+    return moves;
+}
+
+std::vector<std::pair<short, short>> get_legal_moves(bool white)
+{
+    return generate_legal_moves(board_characters, white, en_passant_target,
+                                white_castle_ks, white_castle_qs, black_castle_ks, black_castle_qs);
 }
 
 // breakdown of one move's evaluation, used by verbose mode
@@ -528,32 +657,29 @@ const char* bot_mode_name()
     }
 }
 
-// combines the raw evaluation components according to the current bot personality
-long weighted(long material, long proximity, long check, long expose)
+// scores one move on a thread-local board copy; safe to call from multiple threads
+long score_move(std::vector<char>& b, short from, short to, bool botWhite, MoveEval* eval = nullptr)
 {
-    switch (bot_mode)
+    char moving = b[from];
+    char save_to = b[to];
+
+    bool en_passant_capture = false;
+    short cap_square = -1;
+    char save_cap = ' ';
+    if (to == en_passant_target && toupper(moving) == 'P' && from % 8 != to % 8)
     {
-        case 1: return material * 3 + proximity + check * 10 - expose * 20;
-        case 2: return material + proximity * 3 + check * 40 - expose * 20;
-        case 3: return material * 3 - expose * 50 + check * 5;
-        case 4: return material - expose * 70 + check * 10;
-        default: return material + proximity + check * 10 - expose * 20;
+        en_passant_capture = true;
+        cap_square = from / 8 * 8 + to % 8;
+        save_cap = b[cap_square];
     }
-}
 
-// scores one move on a copy of the position; safe to call in any order
-long score_move(const Board& b, short from, short to, bool botWhite, MoveEval* eval = nullptr)
-{
-    char moving = b.sq[from];
-    char captured = b.sq[to];
-    if (to == b.ep && toupper(moving) == 'P' && from % 8 != to % 8)
-        captured = b.sq[from / 8 * 8 + to % 8]; // en passant
-
-    Board out;
-    try_move(b, from, to, botWhite, out);
+    // simulate the move
+    b[to] = moving;
+    b[from] = ' ';
+    if (en_passant_capture) b[cap_square] = ' ';
 
     // 1. capture material
-    long capture_score = piece_value(captured) * PIECE_SCALE;
+    long capture_score = piece_value(en_passant_capture ? save_cap : save_to) * 10;
 
     // 2. how many moves to attack the enemy king (piece proximity)
     long proximity_score = 0;
@@ -561,7 +687,7 @@ long score_move(const Board& b, short from, short to, bool botWhite, MoveEval* e
     short kingpos = -1;
     for (short i = 0; i < 64; i++)
     {
-        if (out.sq[i] == enemy_king)
+        if (b[i] == enemy_king)
         {
             kingpos = i;
             break;
@@ -573,22 +699,45 @@ long score_move(const Board& b, short from, short to, bool botWhite, MoveEval* e
         short dc = kingpos % 8 - to % 8;
         dr = dr > 0 ? dr : -dr;
         dc = dc > 0 ? dc : -dc;
-        proximity_score = PROXIMITY_CONST - (dr + dc);
+        proximity_score = 14 - (dr + dc);
     }
 
     // 3. does the move expose the bot's king
-    long expose_penalty = king_in_check(out, botWhite) ? 1 : 0;
+    long expose_penalty = king_in_check(b, botWhite) ? 1 : 0;
 
     // 4. does the move check the enemy king
-    long check_bonus = king_in_check(out, !botWhite) ? 1 : 0;
+    long check_bonus = king_in_check(b, !botWhite) ? 1 : 0;
 
-    long final = weighted(capture_score, proximity_score, check_bonus, expose_penalty);
+    // undo the simulation
+    b[from] = moving;
+    b[to] = save_to;
+    if (en_passant_capture) b[cap_square] = save_cap;
+
+    long final = 0;
+    switch (bot_mode)
+    {
+        case 1: // Aggressive - material
+            final = capture_score * 3 + proximity_score + check_bonus * 10 - expose_penalty * 20;
+            break;
+        case 2: // Offensive - focus on king
+            final = capture_score + proximity_score * 3 + check_bonus * 40 - expose_penalty * 20;
+            break;
+        case 3: // Defensive - material
+            final = capture_score * 3 - expose_penalty * 50 + check_bonus * 5;
+            break;
+        case 4: // Guarding - defensive focus on king
+            final = capture_score - expose_penalty * 70 + check_bonus * 10;
+            break;
+        default:
+            final = capture_score + proximity_score + check_bonus * 10 - expose_penalty * 20;
+            break;
+    }
     if (eval)
     {
         eval->from = from;
         eval->to = to;
         eval->piece = moving;
-        eval->captured_piece = captured;
+        eval->captured_piece = en_passant_capture ? save_cap : save_to;
         eval->capture_score = capture_score;
         eval->proximity_score = proximity_score;
         eval->expose_penalty = expose_penalty;
@@ -596,29 +745,6 @@ long score_move(const Board& b, short from, short to, bool botWhite, MoveEval* e
         eval->final = final;
     }
     return final;
-}
-
-std::vector<std::pair<short, short>> generate_legal_moves(const Board& b, bool white)
-{
-    std::vector<std::pair<short, short>> moves;
-    Board out;
-    for (short from = 0; from < 64; from++)
-    {
-        if (!is_player_piece(b.sq[from], white)) continue;
-        for (short to = 0; to < 64; to++)
-        {
-            if (from == to) continue;
-            if (!legal_move(b, from, to, white)) continue;
-            // reject moves that leave own king in check
-            if (try_move(b, from, to, white, out)) moves.push_back({from, to});
-        }
-    }
-    return moves;
-}
-
-std::vector<std::pair<short, short>> get_legal_moves(bool white)
-{
-    return generate_legal_moves(game, white);
 }
 
 // ---=== SEARCH ===---
@@ -629,16 +755,16 @@ const int DEFAULT_MAX_DEPTH = 4; // depth used when no time limit is set
 const int PREDICT_DEPTH = 3; // depth used for predicted opponent replies
 
 // static evaluation of a position from `sideToMove`'s point of view
-long evaluate(const Board& b, bool sideToMove)
+long evaluate(const std::vector<char>& b, bool sideToMove)
 {
     long mat = 0;
     short enemy_king = -1;
     for (short i = 0; i < 64; i++)
     {
-        char c = b.sq[i];
+        char c = b[i];
         if (c == ' ') continue;
         bool mine = is_white_piece(c) == sideToMove;
-        long v = piece_value(c) * PIECE_SCALE;
+        long v = piece_value(c) * 10;
         mat += mine ? v : -v;
         if (!mine && toupper(c) == 'K') enemy_king = i;
     }
@@ -648,18 +774,25 @@ long evaluate(const Board& b, bool sideToMove)
     {
         for (short i = 0; i < 64; i++)
         {
-            char c = b.sq[i];
+            char c = b[i];
             if (c == ' ' || is_white_piece(c) != sideToMove) continue;
             short dr = enemy_king / 8 - i / 8;
             short dc = enemy_king % 8 - i % 8;
             dr = dr > 0 ? dr : -dr;
             dc = dc > 0 ? dc : -dc;
-            proximity += PROXIMITY_CONST - (dr + dc);
+            proximity += 14 - (dr + dc);
         }
     }
     long my_check = king_in_check(b, sideToMove) ? 1 : 0;
     long enemy_check = king_in_check(b, !sideToMove) ? 1 : 0;
-    return weighted(mat, proximity, enemy_check, my_check);
+    switch (bot_mode)
+    {
+        case 1: return mat * 3 + proximity + enemy_check * 10 - my_check * 20;
+        case 2: return mat + proximity * 3 + enemy_check * 40 - my_check * 20;
+        case 3: return mat * 3 - my_check * 50 + enemy_check * 5;
+        case 4: return mat - my_check * 70 + enemy_check * 10;
+        default: return mat + proximity + enemy_check * 10 - my_check * 20;
+    }
 }
 
 // negamax with alpha-beta pruning; sets `aborted` if the time deadline is hit
@@ -669,11 +802,11 @@ long negamax(const Board& st, bool toMove, int depth, long alpha, long beta,
     if (aborted) return 0;
     if (std::chrono::steady_clock::now() > deadline) { aborted = true; return 0; }
 
-    auto moves = generate_legal_moves(st, toMove);
+    auto moves = generate_legal_moves(st.sq, toMove, st.ep, st.wks, st.wqs, st.bks, st.bqs);
     if (moves.empty())
-        return king_in_check(st, toMove) ? -MATE : 0;
+        return king_in_check(st.sq, toMove) ? -MATE : 0;
     if (depth == 0)
-        return evaluate(st, toMove);
+        return evaluate(st.sq, toMove);
 
     // order moves by estimated value (captures first) for better pruning
     std::vector<std::pair<long, size_t>> ord;
@@ -683,10 +816,10 @@ long negamax(const Board& st, bool toMove, int depth, long alpha, long beta,
         long key = 0;
         char target = st.sq[moves[i].second];
         if (target != ' ')
-            key += piece_value(target) * PIECE_SCALE;
+            key += piece_value(target) * 10;
         else if (moves[i].second == st.ep && toupper(st.sq[moves[i].first]) == 'P'
                  && moves[i].first % 8 != moves[i].second % 8)
-            key += PIECE_SCALE; // en passant capture
+            key += 10; // en passant capture
         if (toupper(st.sq[moves[i].first]) == 'P'
             && moves[i].second / 8 == (toMove ? 0 : 7))
             key += 5; // promoting pawn
@@ -737,7 +870,8 @@ SearchResult search_root(bool sideToMove, int depth,
     for (size_t k = 0; k < idx.size(); k++)
     {
         auto mv = moves[idx[k]];
-        Board child = game;
+        Board child{board_characters, en_passant_target,
+                    white_castle_ks, white_castle_qs, black_castle_ks, black_castle_qs};
         make_move(child, mv.first, mv.second, sideToMove);
         long s = -negamax(child, !sideToMove, depth - 1, -INF, INF, deadline, aborted);
         if (aborted) return { -1, -1, true, depth };
@@ -774,8 +908,19 @@ void bot_move()
     size_t nmoves = moves.size();
     std::vector<long> scores(nmoves);
     std::vector<MoveEval> evals(nmoves);
-    for (size_t i = 0; i < nmoves; i++)
-        scores[i] = score_move(game, moves[i].first, moves[i].second, botWhite, &evals[i]);
+
+    if (nmoves < PARALLEL_SCORE_THRESHOLD)
+    {
+        std::vector<char> b = board_characters;
+        for (size_t i = 0; i < nmoves; i++)
+            scores[i] = score_move(b, moves[i].first, moves[i].second, botWhite, &evals[i]);
+    }
+    else
+    {
+        eval_pool().run(0, nmoves, [&](size_t i, std::vector<char>& b) {
+            scores[i] = score_move(b, moves[i].first, moves[i].second, botWhite, &evals[i]);
+        });
+    }
 
     if (verbose_mode)
     {
@@ -874,7 +1019,8 @@ void bot_move()
     }
 
     // apply the chosen move
-    make_move(game, best_from, best_to, botWhite);
+    make_move(board_characters, best_from, best_to, botWhite, en_passant_target,
+              white_castle_ks, white_castle_qs, black_castle_ks, black_castle_qs);
 
     if (time_limit > 0)
     {
@@ -900,7 +1046,7 @@ void get_side_random()
 bool check_if_mate(bool side)
 {
     if (!get_legal_moves(side).empty()) return false;
-    if (king_in_check(game, side))
+    if (king_in_check(board_characters, side))
     {
         std::cout << (side ? "Black" : "White") << " wins by checkmate!\n";
     }
@@ -912,7 +1058,7 @@ bool check_if_mate(bool side)
     return true;
 }
 
-void main_game_loop()
+void main_game_loop() //note - consider return to be then returned by main() for better debug etc.
 {
     bool bot_turn = !playerWhite; // the bot plays the opposite color
     while (!isVictory && !input_ended)
