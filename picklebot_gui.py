@@ -99,6 +99,11 @@ POMOC = {
         'Time limit in seconds per side.\n'
         'With 0 (none) the bot searches to a fixed depth. '
         'With a limit it thinks as long as the clock allows.'),
+    'glebokosc': (
+        'Ile ruchów (półruchów) bot przewiduje naprzód.\n'
+        'Wyższa wartość = silniejszy, ale wolniejszy bot.',
+        'How many moves (plies) the bot looks ahead.\n'
+        'Higher = a stronger but slower bot.'),
     'verbose': (
         'Pokazuje myślenie bota — oceny pozycji i najlepszy wariant — '
         'w dzienniku gry podczas szukania.',
@@ -256,6 +261,7 @@ class Aplikacja:
         self.var_strona = tk.StringVar()
         self.var_plansza = tk.StringVar()
         self.var_czas = tk.StringVar(value='0')
+        self.var_glebokosc = tk.StringVar(value='4')
         self.var_verbose = tk.BooleanVar(value=False)
 
         self.etykiety = []
@@ -275,6 +281,8 @@ class Aplikacja:
         self.plansze.bind('<<ComboboxSelected>>', lambda _e: self._wybrano_plansze())
 
         czas = tk.Spinbox(panel, from_=0, to=600, textvariable=self.var_czas, width=22)
+
+        glebokosc = tk.Spinbox(panel, from_=1, to=8, textvariable=self.var_glebokosc, width=22)
 
         self.verbose_ck = tk.Checkbutton(panel, bg=TLO, fg='#c8d6e0', selectcolor='#1c2229',
                                          variable=self.var_verbose)
@@ -316,6 +324,10 @@ class Aplikacja:
         czas.grid(row=wiersz, column=1, pady=2, sticky='w')
         self._przycisk_pomocy(panel, 'czas', wiersz)
         wiersz += 1
+        self._etykieta_pola(panel, 'glebokosc', wiersz)
+        glebokosc.grid(row=wiersz, column=1, pady=2, sticky='w')
+        self._przycisk_pomocy(panel, 'glebokosc', wiersz)
+        wiersz += 1
         self._etykieta_pola(panel, 'verbose', wiersz)
         self.verbose_ck.grid(row=wiersz, column=1, pady=2, sticky='w')
         self._przycisk_pomocy(panel, 'verbose', wiersz)
@@ -349,6 +361,7 @@ class Aplikacja:
             'strona': self._t('Twoja strona:', 'Your side:'),
             'plansza': self._t('Plansza:', 'Board:'),
             'czas': self._t('Czas (s/strona):', 'Time (s/side):'),
+            'glebokosc': self._t('Głębokość (ruchy):', 'Depth (moves):'),
             'verbose': self._t('Tryb verbose', 'Verbose mode'),
             'ruch': self._t('Ruch (np. e2 e4):', 'Move (e.g. e2 e4):'),
         }
@@ -388,7 +401,7 @@ class Aplikacja:
             messagebox.showerror(self._t('Brak picklebota', 'PickleBot missing'), komunikat)
             return
         args = [BINAR, '--mode', str(self._numer_trybu()), '--side', self.kod_strony,
-                '--time', self.var_czas.get()]
+                '--time', self.var_czas.get(), '--depth', self.var_glebokosc.get()]
         args.append('--verbose' if self.var_verbose.get() else '--noverbose')
         if self.en:
             args.append('--en')

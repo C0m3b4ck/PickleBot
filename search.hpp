@@ -11,8 +11,6 @@
 
 const long INF = 1000000000;
 const long MATE = 1000000;
-const int MAX_SEARCH_DEPTH = 6; // deepest the bot will ever look
-const int DEFAULT_MAX_DEPTH = 4; // depth used when no time limit is set
 const int PREDICT_DEPTH = 3; // depth used for predicted opponent replies
 
 // negamax with alpha-beta pruning; sets `aborted` if the time deadline is hit
@@ -42,5 +40,6 @@ extern bool playerWhite;
 extern short time_limit;
 extern bool verbose_mode;
 extern long bot_time_used_ms;
+extern int max_search_depth; // how many plies the bot looks ahead (user-configurable)
 
 #endif // PICKLEBOT_SEARCH_HPP

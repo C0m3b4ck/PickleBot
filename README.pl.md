@@ -40,7 +40,7 @@ Funkcja `weighted()` łączy je w jeden wynik zgodnie z aktywnym **trybem bota**
 
 ### Przeszukiwanie
 
-- **Negamax** z **obcinaniem alfa-beta**, do głębokości 4 domyślnie (do 6).
+- **Negamax** z **obcinaniem alfa-beta**, do konfigurowalnej głębokości (domyślnie 4, maks. 8).
 - **Sortowanie ruchów** według szacunkowej wartości (najpierw bicia) dla lepszego obcinania.
 - **Pogłębianie iteracyjne**: głębokość rośnie tura po turze, aż wyczerpie się budżet czasu; zachowana jest ostatnia ukończona głębokość, więc zawsze gra na czas.
 - **Zarządzanie czasem**: budżet tury to ułamek pozostałego czasu na zegarze strony, z dolnym limitem, więc silnik nigdy się nie zacina.
@@ -79,6 +79,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 | `--mode N` | tryb bota 1-4 (agresywny / ofensywny / defensywny / ochronny) |
 | `--side B\|C\|L` | twoja strona: Białe, Czarne lub Losowo |
 | `--time N` | limit czasu w sekundach na stronę (0 = brak) |
+| `--depth N` | ile ruchów bot przewiduje naprzód, 1-8 (domyślnie 4) |
 | `--help`, `-h` | pokazanie pomocy i wyjście |
 
 Na starcie zostaniesz zapytany o wszystko, czego nie podałeś flagami:
@@ -86,6 +87,7 @@ Na starcie zostaniesz zapytany o wszystko, czego nie podałeś flagami:
 - **tryb bota** (1-4),
 - twoją **stronę** (Białe / Czarne / Losowo),
 - **limit czasu** w sekundach na stronę (0 = brak),
+- **głębokość szukania** (ile ruchów bot przewiduje naprzód, 1-8),
 - czy włączyć **tryb verbose**.
 
 Ruchy wpisuje się w notacji algebraicznej, np. `e2 e4`.
@@ -100,7 +102,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 python3 picklebot_gui.py
 ```
 
-Panel pozwala wybrać tryb bota (po nazwie — Agresywny, Ofensywny, Defensywny, Ochronny — z krótkim opisem pod spodem), twoją stronę (**Białe**/**Czarne**/**Losowo**, a nie tylko B/C/L), limit czasu i tryb verbose. Każda opcja ma przycisk **"?"**, który wyjaśnia, do czego służy. Potem pokazuje szachownicę, czyją jest tura, dziennik gry i pole na ruchy. Figurami ruszasz **klikając** je (wybierz figurę, potem kliknij pole docelowe) albo wpisując ruch do pola. Wszystko, co mówi silnik — i każda szachownica — jest też wypisywane do terminala. Zaczyna po angielsku; podaj `--pl`, aby zacząć po polsku.
+Panel pozwala wybrać tryb bota (po nazwie — Agresywny, Ofensywny, Defensywny, Ochronny — z krótkim opisem pod spodem), twoją stronę (**Białe**/**Czarne**/**Losowo**, a nie tylko B/C/L), limit czasu, głębokość szukania i tryb verbose. Każda opcja ma przycisk **"?"**, który wyjaśnia, do czego służy. Potem pokazuje szachownicę, czyją jest tura, dziennik gry i pole na ruchy. Figurami ruszasz **klikając** je (wybierz figurę, potem kliknij pole docelowe) albo wpisując ruch do pola. Wszystko, co mówi silnik — i każda szachownica — jest też wypisywane do terminala. Zaczyna po angielsku; podaj `--pl`, aby zacząć po polsku.
 
 ## TODO
 

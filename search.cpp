@@ -92,7 +92,7 @@ std::pair<short, short> predict_opponent_reply(bool botWhite)
     bool oppWhite = !botWhite;
     if (get_legal_moves(oppWhite).empty()) return {-1, -1};
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
-    SearchResult r = search_root(oppWhite, PREDICT_DEPTH, deadline, nullptr);
+    SearchResult r = search_root(oppWhite, std::min(PREDICT_DEPTH, max_search_depth), deadline, nullptr);
     return {r.from, r.to};
 }
 
@@ -174,7 +174,7 @@ void bot_move()
     // iterative deepening: keep the last depth that finished in time
     int reached_depth = 1;
     SearchResult choice{ best_from, best_to, false, 1 };
-    int max_depth = (time_limit > 0) ? MAX_SEARCH_DEPTH : DEFAULT_MAX_DEPTH;
+    int max_depth = max_search_depth;
     for (int depth = 2; depth <= max_depth; depth++)
     {
         if (std::chrono::steady_clock::now() >= deadline) break;

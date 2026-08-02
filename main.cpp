@@ -32,6 +32,7 @@ bool isVictory = false;
 bool input_ended = false; //set when the player's input stream closes
 bool playerWhite;  //true for white, false for black
 short time_limit = 0;
+int max_search_depth = 4; // how many plies the bot looks ahead
 short bot_mode = 0; //aggressigve, offensive, defensive, guarding
 bool verbose_mode = false; //true to show the bot's thinking
 long player_time_used_ms = 0; //human side clock
@@ -40,6 +41,7 @@ long bot_time_used_ms = 0; //bot side clock
 // ---=== CLI FLAGS ===---
 // mirrors the Decoder-Malfunction-Simulator's flag handling (--en/--english ...)
 bool flag_bot_mode = false, flag_side = false, flag_time = false, flag_verbose = false;
+bool flag_depth = false;
 bool side_random = false; //set by --side R
 
 void print_usage()
@@ -53,6 +55,7 @@ void print_usage()
     std::cout << "  --mode N                  " << tl("tryb bota 1-4", "bot mode 1-4") << "\n";
     std::cout << "  --side W|B|R              " << tl("twoja strona: Białe, Czarne lub Losowo", "your side: White, Black or Random") << "\n";
     std::cout << "  --time N                  " << tl("limit czasu w sekundach na stronę (0 = brak)", "time limit in seconds per side (0 = none)") << "\n";
+    std::cout << "  --depth N                  " << tl("jak głęboko bot myśli naprzód (1-8)", "how many moves the bot looks ahead (1-8)") << "\n";
     std::cout << "  --help, -h                " << tl("ta pomoc", "this help") << "\n";
 }
 
@@ -88,6 +91,13 @@ void parse_flags(int argc, char** argv)
             time_limit = (short)atoi(argv[++i]);
             if (time_limit < 0) time_limit = 0;
             flag_time = true;
+        }
+        else if (a == "--depth" && i + 1 < argc)
+        {
+            max_search_depth = atoi(argv[++i]);
+            if (max_search_depth < 1) max_search_depth = 1;
+            if (max_search_depth > 8) max_search_depth = 8;
+            flag_depth = true;
         }
         else if (a == "--help" || a == "-h") { print_usage(); exit(0); }
     }
@@ -192,6 +202,15 @@ void get_settings()
                         "Input time limit in seconds per side (0 for none):") << " ";
         if (!read_int(time_limit)) time_limit = 0;
         if (time_limit < 0) time_limit = 0;
+    }
+    // search depth value
+    if (!flag_depth)
+    {
+        std::cout << tl("Podaj głębokość szukania (ile ruchów bot przewiduje naprzód, 1-8):",
+                        "Input search depth (how many moves the bot predicts ahead, 1-8):") << " ";
+        short depth = prompt_number(1, 8);
+        if (input_ended) return;
+        max_search_depth = depth;
     }
     // verbose mode
     if (!flag_verbose)

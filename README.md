@@ -42,7 +42,7 @@ A `weighted()` function blends these into a single score according to the active
 
 ### Search
 
-- **Negamax** with **alpha-beta pruning**, running to depth 4 by default (up to 6).
+- **Negamax** with **alpha-beta pruning**, running to a configurable depth (default 4, up to 8).
 - **Move ordering** by estimated value (captures first) for better pruning.
 - **Iterative deepening**: depth increases turn by turn until the time budget runs out; the last completed depth is kept, so it always moves on time.
 - **Time management**: the turn budget is a fraction of the remaining per-side clock, with a floor so it never stalls.
@@ -81,6 +81,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 | `--mode N` | bot mode 1-4 (aggressive / offensive / defensive / guarding) |
 | `--side W\|B\|R` | your side: White, Black or Random |
 | `--time N` | time limit in seconds per side (0 = none) |
+| `--depth N` | how many moves the bot looks ahead, 1-8 (default 4) |
 | `--help`, `-h` | show usage and exit |
 
 On startup you're asked for anything you didn't pass as a flag:
@@ -88,6 +89,7 @@ On startup you're asked for anything you didn't pass as a flag:
 - the **bot mode** (1-4),
 - your **side** (White / Black / Random),
 - a **time limit** in seconds per side (0 for none),
+- the **search depth** (how many moves the bot predicts ahead, 1-8),
 - whether to enable **verbose mode**.
 
 Moves are entered as algebraic squares, e.g. `e2 e4`.
@@ -102,7 +104,7 @@ g++ -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-all -std=c++17 -Wall -Wextra \
 python3 picklebot_gui.py
 ```
 
-The panel lets you pick the bot mode (by name — Aggressive, Offensive, Defensive, Guarding — with a short description underneath), your side (**White**/**Black**/**Random**, not just W/B/R), the time limit and verbose mode. Every option has a **"?"** button that explains what it does. It then shows the board, whose turn it is, the game log and a move entry. Move pieces by **clicking** them (select a piece, then click its destination) or by typing into the move entry. Everything the engine says — and every board — is also echoed to the terminal. It starts in English; pass `--pl` to begin in Polish.
+The panel lets you pick the bot mode (by name — Aggressive, Offensive, Defensive, Guarding — with a short description underneath), your side (**White**/**Black**/**Random**, not just W/B/R), the time limit, the search depth and verbose mode. Every option has a **"?"** button that explains what it does. It then shows the board, whose turn it is, the game log and a move entry. Move pieces by **clicking** them (select a piece, then click its destination) or by typing into the move entry. Everything the engine says — and every board — is also echoed to the terminal. It starts in English; pass `--pl` to begin in Polish.
 
 ## TODO
 
