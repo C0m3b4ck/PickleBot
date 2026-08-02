@@ -21,18 +21,30 @@ ANSI = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
 KATALOG = os.path.dirname(os.path.abspath(__file__))
 BINAR = os.path.join(KATALOG, 'picklebot')
 
-KOLOR = {'light': '#eeeed2', 'dark': '#769656'}
 KOLOR_ZAZNACZENIA = '#f0c040'
-TEXT_LIGHT = '#1c1c1c'
-TEXT_DARK = '#f8f8f8'
+KOLOR_BIALY = '#e8e8e8'
+KOLOR_CZARNY = '#1c1c1c'
+KOLOR_CIEN_BIALY = '#000000'
+KOLOR_CIEN_CZARNY = '#f8f8f8'
 TLO = '#101418'
 
 GLYPHY = {
-    'P': '\u2659', 'N': '\u2658', 'B': '\u2657', 'R': '\u2656',
-    'Q': '\u2655', 'K': '\u2654',
+    'P': '\u265f', 'N': '\u265e', 'B': '\u265d', 'R': '\u265c',
+    'Q': '\u265b', 'K': '\u265a',
     'p': '\u265f', 'n': '\u265e', 'b': '\u265d', 'r': '\u265c',
     'q': '\u265b', 'k': '\u265a',
 }
+
+# board colour themes (light/dark squares), selectable from the panel
+PLANSZE = [
+    {'pl': 'Zielona', 'en': 'Green', 'light': '#eeeed2', 'dark': '#769656'},
+    {'pl': 'Drewniana', 'en': 'Wood', 'light': '#f0d9b5', 'dark': '#b58863'},
+    {'pl': 'Szara', 'en': 'Gray', 'light': '#f0f0f0', 'dark': '#959595'},
+    {'pl': 'Niebieska', 'en': 'Blue', 'light': '#dee3e6', 'dark': '#8ca2ad'},
+    {'pl': 'Bordowa', 'en': 'Maroon', 'light': '#ebd0c9', 'dark': '#a85a4a'},
+]
+
+PION = ('DejaVu Sans', 24)
 
 KOLOR_LOGU = {
     'ok': '#35d07f', 'err': '#ff5d5d', 'warn': '#ffd166',
@@ -124,6 +136,7 @@ class Aplikacja:
         self.q = queue.Queue()
         self.proc = None
         self.pola = [None] * 64
+        self.plansza_idx = 0        # selected board theme from PLANSZE
         self.zaznaczone = None      # index of the selected square, or None
         self.obecna_plansza = None  # last parsed @BOARD@ (64 chars)
         self.player_white = None    # player's colour from @SIDE@
@@ -186,6 +199,21 @@ class Aplikacja:
         self.strony['values'] = nazwy
         self.var_strona.set(self._nazwa_strony(self.kod_strony))
 
+    def _nazwa_planszy(self, t):
+        return t['en'] if self.en else t['pl']
+
+    def _wybrano_plansze(self):
+        for i, t in enumerate(PLANSZE):
+            if self._nazwa_planszy(t) == self.var_plansza.get():
+                self.plansza_idx = i
+                break
+        self._zastosuj_plansze()
+
+    def _odswiez_plansze(self):
+        nazwy = [self._nazwa_planszy(t) for t in PLANSZE]
+        self.plansze['values'] = nazwy
+        self.var_plansza.set(self._nazwa_planszy(PLANSZE[self.plansza_idx]))
+
     def _pomoc_tekst(self, klucz):
         pl, en = POMOC[klucz]
         return en if self.en else pl
@@ -214,13 +242,11 @@ class Aplikacja:
         ramka = tk.Frame(self.root, bg=TLO)
         ramka.pack(side='left', padx=12, pady=12)
         for i in range(64):
-            ciemne = (i // 8 + i % 8) % 2 == 0
-            e = tk.Label(ramka, width=3, height=1, font=('DejaVu Sans', 22),
-                         bg=KOLOR['dark'] if ciemne else KOLOR['light'],
-                         fg=TEXT_DARK if ciemne else TEXT_LIGHT)
+            e = tk.Canvas(ramka, width=46, height=46, bd=0, highlightthickness=0)
             e.grid(row=i // 8, column=i % 8)
             e.bind('<Button-1>', lambda _e, i=i: self._klik(i))
             self.pola[i] = e
+        self._zastosuj_plansze()
 
     def _buduj_panel(self):
         panel = tk.Frame(self.root, bg=TLO)
@@ -228,6 +254,7 @@ class Aplikacja:
 
         self.var_tryb = tk.StringVar()
         self.var_strona = tk.StringVar()
+        self.var_plansza = tk.StringVar()
         self.var_czas = tk.StringVar(value='0')
         self.var_verbose = tk.BooleanVar(value=False)
 
@@ -243,6 +270,9 @@ class Aplikacja:
         self.strony = ttk.Combobox(panel, textvariable=self.var_strona, state='readonly', width=22)
         self.strony.bind('<<ComboboxSelected>>', lambda _e: self._wybrano_strone())
         self.kod_strony = 'W'
+
+        self.plansze = ttk.Combobox(panel, textvariable=self.var_plansza, state='readonly', width=22)
+        self.plansze.bind('<<ComboboxSelected>>', lambda _e: self._wybrano_plansze())
 
         czas = tk.Spinbox(panel, from_=0, to=600, textvariable=self.var_czas, width=22)
 
@@ -279,6 +309,9 @@ class Aplikacja:
         self.strony.grid(row=wiersz, column=1, pady=2, sticky='w')
         self._przycisk_pomocy(panel, 'strona', wiersz)
         wiersz += 1
+        self._etykieta_pola(panel, 'plansza', wiersz)
+        self.plansze.grid(row=wiersz, column=1, pady=2, sticky='w')
+        wiersz += 1
         self._etykieta_pola(panel, 'czas', wiersz)
         czas.grid(row=wiersz, column=1, pady=2, sticky='w')
         self._przycisk_pomocy(panel, 'czas', wiersz)
@@ -314,6 +347,7 @@ class Aplikacja:
         napisy = {
             'tryb': self._t('Tryb bota:', 'Bot mode:'),
             'strona': self._t('Twoja strona:', 'Your side:'),
+            'plansza': self._t('Plansza:', 'Board:'),
             'czas': self._t('Czas (s/strona):', 'Time (s/side):'),
             'verbose': self._t('Tryb verbose', 'Verbose mode'),
             'ruch': self._t('Ruch (np. e2 e4):', 'Move (e.g. e2 e4):'),
@@ -331,6 +365,7 @@ class Aplikacja:
         self._ustaw_status()
         self._odswiez_tryby()
         self._odswiez_strony()
+        self._odswiez_plansze()
 
     def _przelacz_jezyk(self):
         self.en = not self.en
@@ -438,18 +473,34 @@ class Aplikacja:
     def _rysuj_plansze(self, plansza):
         self.obecna_plansza = plansza
         for i, znak in enumerate(plansza):
-            self.pola[i].configure(text=GLYPHY.get(znak, ''))
+            e = self.pola[i]
+            e.delete('figura')
+            if znak != ' ':
+                g = GLYPHY[znak]
+                kolor = KOLOR_BIALY if znak.isupper() else KOLOR_CZARNY
+                cien = KOLOR_CIEN_BIALY if znak.isupper() else KOLOR_CIEN_CZARNY
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        if dx or dy:
+                            e.create_text(24 + dx, 24 + dy, text=g, font=PION,
+                                          fill=cien, tags='figura')
+                e.create_text(23, 23, text=g, font=PION, fill=kolor, tags='figura')
+        self._podswietl()
+
+    def _tlo_pola(self, i):
+        t = PLANSZE[self.plansza_idx]
+        ciemne = (i // 8 + i % 8) % 2 == 0
+        return t['dark'] if ciemne else t['light']
+
+    def _zastosuj_plansze(self):
+        for i in range(64):
+            self.pola[i].configure(bg=self._tlo_pola(i))
         self._podswietl()
 
     def _podswietl(self):
         for i in range(64):
-            ciemne = (i // 8 + i % 8) % 2 == 0
-            bg = KOLOR['dark'] if ciemne else KOLOR['light']
-            fg = TEXT_DARK if ciemne else TEXT_LIGHT
-            if i == self.zaznaczone:
-                bg = KOLOR_ZAZNACZENIA
-                fg = '#1c1c1c'
-            self.pola[i].configure(bg=bg, fg=fg)
+            bg = KOLOR_ZAZNACZENIA if i == self.zaznaczone else self._tlo_pola(i)
+            self.pola[i].configure(bg=bg)
 
     def _klik(self, indeks):
         if not self.gra_aktywna or self.proc is None or self.proc.poll() is not None:

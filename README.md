@@ -1,6 +1,8 @@
 # PickleBot
 ![version](https://img.shields.io/badge/version-1.0-blue) ![language](https://img.shields.io/badge/language-english-green) ![cpp](https://img.shields.io/badge/engine-C%2B%2B17-blue) ![python](https://img.shields.io/badge/gui-Python%203%20%2B%20Tkinter-green)
 
+![PickleBot](image.png)
+
 **🇵🇱🇵🇱🇵🇱 Made in Poland 🇵🇱🇵🇱🇵🇱**
 [🇵🇱 Przeczytaj po polsku!](README.pl.md)
 
